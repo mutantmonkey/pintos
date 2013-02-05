@@ -101,9 +101,7 @@ timer_sleep (int64_t ticks)
   struct thread *cur = thread_current ();
   cur->unblock_ticks = start + ticks;
 
-  /*printf("Start: %d | Ticks: %d\n", start, ticks);
-  printf("Sleep %d for thread %s until %d\n", ticks, cur->name, cur->unblock_ticks);
-  printf("%d\n", (start + ticks));*/
+  //printf("%d: thread %d needs to sleep for %d ticks\n", start, cur->tid, ticks);
 
   list_push_back (&alarm_list, &thread_current ()->alarm_elem);
   list_remove (&thread_current ()->elem);
