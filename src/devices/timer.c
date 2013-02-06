@@ -98,6 +98,11 @@ timer_sleep (int64_t ticks)
     return;
   int64_t start = timer_ticks ();
 
+  if (ticks < 0)
+  {
+    return;
+  }
+
   ASSERT (intr_get_level () == INTR_ON);
 
   struct thread *cur = thread_current ();
