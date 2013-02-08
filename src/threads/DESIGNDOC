@@ -169,6 +169,10 @@ ticks   A   B   C   A   B   C   to run
 >> type and/or a set of functions or macros to manipulate fixed-point
 >> numbers, why did you do so?  If not, why not?
 
+I wanted to implement fixed-point math in a reusable way that allowed for
+simple code, so I implemented a module with a set of functions to manipulate
+fixed-point numbers.
+
 			   SURVEY QUESTIONS
 			   ================
 
