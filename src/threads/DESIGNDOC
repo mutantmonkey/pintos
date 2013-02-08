@@ -29,28 +29,59 @@ Andrew Shugarts	     <rue92@vt.edu>
 >> `struct' member, global or static variable, `typedef', or
 >> enumeration.  Identify the purpose of each in 25 words or less.
 
-This is a test line.
+static struct list alarm_list;
+/* This list stores the threads that have called timer_sleep() and will wake up
+ * eventually. */
+
+struct thread {
+    struct list_elem alarm_elem;
+    /* This list_elem stores the thread's position in the alarm_list. */
+
+    uint64_t unblock_ticks;
+    /* Ticks at which the process should be unblocked. */
+}
 
 ---- ALGORITHMS ----
 
 >> A2: Briefly describe what happens in a call to timer_sleep(),
 >> including the effects of the timer interrupt handler.
 
+When a thread calls timer_sleep(), the number of ticks to sleep is checked to
+ensure that it is non-negative; if it is, the call is ignored. If it is not,
+then the current ticks and the number of ticks to sleep are added and stored in
+unblock_ticks, and the thread is appended to alarm_list, then blocked. At each
+call of the timer interrupt handler, this list is iterated through and any
+thread that has unblock_ticks <= the current number of ticks will be unblocked.
+
 >> A3: What steps are taken to minimize the amount of time spent in
 >> the timer interrupt handler?
+
+Minimal computation is used in the timer interrupt handler to ensure speed, and
+a separate alarm_list is kept to avoid having to iterate through every thread
+when the interrupt handler is called.
 
 ---- SYNCHRONIZATION ----
 
 >> A4: How are race conditions avoided when multiple threads call
 >> timer_sleep() simultaneously?
 
+Because interrupts are disabled, only one thread should be in the critical
+section of timer_sleep() at a time.
+
 >> A5: How are race conditions avoided when a timer interrupt occurs
 >> during a call to timer_sleep()?
+
+Interrupts are disabled when a thread is added to the list of waiting threads.
 
 ---- RATIONALE ----
 
 >> A6: Why did you choose this design?  In what ways is it superior to
 >> another design you considered?
+
+We selected this design because it was the first design we considered. We
+believed that it would be a more efficient use of our time to implement the
+first design than spend time considering other designs that might require more
+careful implementation.
 
 			 PRIORITY SCHEDULING
 			 ===================
@@ -161,4 +192,3 @@ the quarter.
 >> students, either for future quarters or the remaining projects?
 
 >> Any other comments?
-Yes
