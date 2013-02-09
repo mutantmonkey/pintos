@@ -138,6 +138,7 @@ void
 thread_tick (void) 
 {
   struct thread *t = thread_current ();
+  fp coeff;
 
   if (thread_mlfqs)
   {
@@ -148,9 +149,9 @@ thread_tick (void)
               fp_multiply_int(fp_divide_int(fp_convert(1), 60), ready_threads));
 
       // t->recent_cpu = (2*load_avg) / (2*load_avg + 1) * t->recent_cpu + t->nice
-      t->recent_cpu = fp_add_int(fp_multiply(fp_divide(fp_multiply_int(load_avg, 2),
-                      fp_add_int(fp_multiply_int(load_avg, 2), 1)),
-                  t->recent_cpu), t->nice);
+      coeff = fp_divide(fp_multiply_int(load_avg, 2),
+          fp_add_int(fp_multiply_int(load_avg, 2), 1));
+      t->recent_cpu = fp_add_int(fp_multiply(coeff, t->recent_cpu), t->nice);
     }
     else {
       t->recent_cpu = fp_add_int(t->recent_cpu, 1);
