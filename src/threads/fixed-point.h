@@ -6,8 +6,6 @@
 
 typedef int fp;
 
-ASSERT (P + Q == 31);
-
 static inline fp
 fp_convert(int n)
 {
@@ -48,13 +46,13 @@ fp_subtract(fp a, fp b)
 }
 
 static inline fp
-fb_subtract_int(fp a, int n)
+fp_subtract_int(fp a, int n)
 {
   return (fp) (a - fp_convert(n));
 }
 
 static inline fp
-fb_multiply(fp a, fp b)
+fp_multiply(fp a, fp b)
 {
   return (fp) (((int64_t) a) * b / F);
 }

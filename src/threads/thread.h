@@ -95,6 +95,9 @@ struct thread
     struct lock *waiting_for;           /* Lock this thread is waiting for. */
     struct list_elem allelem;           /* List element for all threads list. */
 
+    int nice;                           /* Niceness.*/
+    int recent_cpu;                     /* Thread's recent CPU. */
+
     /* Shared between thread.c and synch.c. */
     struct list_elem elem;              /* List element. */
     struct list_elem alarm_elem;        /* Sleeping thread element. */
