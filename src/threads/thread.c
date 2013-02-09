@@ -20,10 +20,6 @@
    of thread.h for details. */
 #define THREAD_MAGIC 0xcd6abf4b
 
-/* List of processes in THREAD_READY state, that is, processes
-   that are ready to run but not actually running. */
-static struct list ready_list;
-
 /* Array of lists containing processes that are THREAD_READY and
    should be scheduled to run with an associated priority. */
 static struct list priority_lists[64];
@@ -94,11 +90,10 @@ thread_init (void)
   ASSERT (intr_get_level () == INTR_OFF);
 
   lock_init (&tid_lock);
-  list_init (&ready_list);
   list_init (&all_list);
 
-  int i = PRI_MIN;
-  for (; i <= PRI_MAX; i++) {
+  int i;
+  for (i = PRI_MAX; i >= PRI_MIN; i--) {
     list_init(&(priority_lists[i]));
   }
 
@@ -209,6 +204,7 @@ thread_create (const char *name, int priority,
 
   /* Add to run queue. */
   thread_unblock (t);
+  thread_yield();
 
   return tid;
 }
@@ -246,8 +242,7 @@ thread_unblock (struct thread *t)
 
   old_level = intr_disable ();
   ASSERT (t->status == THREAD_BLOCKED);
-  list_push_back (&(priority_lists[t->priority]), &t->elem);
-  //  list_push_back (&ready_list, &t->elem);
+  list_push_back (&(priority_lists[t->effective]), &t->elem);
   t->status = THREAD_READY;
   intr_set_level (old_level);
 }
@@ -318,7 +313,7 @@ thread_yield (void)
 
   old_level = intr_disable ();
   if (cur != idle_thread) 
-    list_push_back (&(priority_lists[cur->priority]), &cur->elem);
+    list_push_back (&(priority_lists[cur->effective]), &cur->elem);
   cur->status = THREAD_READY;
   schedule ();
   intr_set_level (old_level);
@@ -345,14 +340,20 @@ thread_foreach (thread_action_func *func, void *aux)
 void
 thread_set_priority (int new_priority) 
 {
-  thread_current ()->priority = new_priority;
+  struct thread *cur = thread_current ();
+  enum intr_level old_level = intr_disable ();
+
+  cur->priority = new_priority;
+  thread_refresh_priority();
+  thread_yield();
+  intr_set_level (old_level);
 }
 
 /* Returns the current thread's priority. */
 int
 thread_get_priority (void) 
 {
-  return thread_current ()->priority;
+  return thread_current ()->effective;
 }
 
 /* Sets the current thread's nice value to NICE. */
@@ -471,7 +472,10 @@ init_thread (struct thread *t, const char *name, int priority)
   t->status = THREAD_BLOCKED;
   strlcpy (t->name, name, sizeof t->name);
   t->stack = (uint8_t *) t + PGSIZE;
-  t->priority = priority;
+  t->priority = t->effective = priority;
+  t->waiting_for = NULL;
+  list_init(&t->holding);
+  sema_init(&t->pri, 1);
   t->magic = THREAD_MAGIC;
   old_level = intr_disable ();
   list_push_back (&all_list, &t->allelem);
@@ -501,8 +505,8 @@ next_thread_to_run (void)
 {
   /* Look through the different priorities and pick the highest priority
      to run first. */
-  int i = PRI_MAX;
-  for (; i >= PRI_MIN; i--) {
+  int i;
+  for (i = PRI_MAX; i >= PRI_MIN; --i) {
     if (!list_empty(&(priority_lists[i]))) {
       return list_entry (list_pop_front(&(priority_lists[i])), 
 			 struct thread, elem);
@@ -593,7 +597,39 @@ allocate_tid (void)
 
   return tid;
 }
-
+
+void
+thread_update_priority (struct thread *t)
+{
+  list_remove(&t->elem);
+  list_push_back(&(priority_lists[t->effective]),
+		 &t->elem);
+}
+
+void
+thread_refresh_priority ()
+{
+  struct thread *cur = thread_current ();
+  struct list_elem *e, *f;
+  struct lock *lock;
+  struct thread *waiter = NULL;
+  cur->effective = cur->priority;
+
+  if (list_empty(&cur->holding))
+    return;
+
+  for (e = list_begin(&cur->holding);
+       e != list_end(&cur->holding); e = list_next(e))
+    {
+      lock = list_entry(e, struct lock, elem);
+      if (!list_empty(&lock->semaphore.waiters))
+	{
+	  f = list_front (&lock->semaphore.waiters);
+	  waiter = list_entry (f, struct thread, elem);
+	  cur->effective = waiter->effective;
+	}
+    }
+}
 /* Offset of `stack' member within `struct thread'.
    Used by switch.S, which can't figure it out on its own. */
 uint32_t thread_stack_ofs = offsetof (struct thread, stack);
