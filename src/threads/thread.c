@@ -101,6 +101,7 @@ thread_init (void)
 {
   ASSERT (intr_get_level () == INTR_OFF);
 
+  ready_threads = 1;
   load_avg = 0;
 
   lock_init (&tid_lock);
@@ -143,26 +144,37 @@ thread_tick (void)
 {
   struct thread *t = thread_current ();
 
-  if (timer_ticks() % TIMER_FREQ == 0)
+  if (thread_mlfqs)
   {
-    // load_avg = (59/60)*load_avg + (1/60)*ready_threads
-    load_avg = fp_add(fp_multiply(fp_divide(59, 60), load_avg),
-            fp_multiply(fp_divide(1, 60), ready_threads));
+    if (timer_ticks() % TIMER_FREQ == 0)
+    {
+      // load_avg = (59/60)*load_avg + (1/60)*ready_threads
+      load_avg = fp_add(fp_multiply(fp_divide_int(fp_convert(59), 60), load_avg),
+              fp_multiply_int(fp_divide_int(fp_convert(1), 60), ready_threads));
 
-    // t->recent_cpu = (2*load_avg) / (2*load_avg + 1) * t->recent_cpu + t->nice
-    t->recent_cpu = fp_add(fp_multiply(fp_divide(fp_multiply_int(load_avg, 2),
-                    fp_add_int(fp_multiply_int(load_avg, 2), 1)),
-                t->recent_cpu), t->nice);
-  }
-  else {
-    fp_add_int(t->recent_cpu, 1);
-  }
+      // t->recent_cpu = (2*load_avg) / (2*load_avg + 1) * t->recent_cpu + t->nice
+      t->recent_cpu = fp_add_int(fp_multiply(fp_divide(fp_multiply_int(load_avg, 2),
+                      fp_add_int(fp_multiply_int(load_avg, 2), 1)),
+                  t->recent_cpu), t->nice);
+    }
+    else {
+      t->recent_cpu = fp_add_int(t->recent_cpu, 1);
+    }
 
-  if (timer_ticks () % 4 == 0)
-  {
-    // t->priority = PRI_MAX - (t->recent_cpu / 4) - (t->nice * 2);
-    t->priority = PRI_MAX - fp_toint(fp_subtract(fp_divide_int(t->recent_cpu,
-                    4), fp_multiply_int(t->nice, 2)));
+    if (timer_ticks () % 4 == 0)
+    {
+      // t->priority = PRI_MAX - (t->recent_cpu / 4) - (t->nice * 2);
+      t->priority = PRI_MAX - fp_toint(fp_subtract_int(fp_divide_int(t->recent_cpu,
+                      4), t->nice * 2));
+
+      if (t->priority < PRI_MIN)
+        t->priority = PRI_MIN;
+      if (t->priority > PRI_MAX)
+        t->priority = PRI_MAX;
+
+      ASSERT (t->priority >= PRI_MIN);
+      ASSERT (t->priority <= PRI_MAX);
+    }
   }
 
   /* Update statistics. */
@@ -224,19 +236,6 @@ thread_create (const char *name, int priority,
   init_thread (t, name, priority);
   tid = t->tid = allocate_tid ();
 
-  if (thread_mlfqs)
-  {
-    t->nice = 0;
-
-    // t->recent_cpu = (2*load_avg) / (2*load_avg + 1) + t->nice
-    t->recent_cpu = fp_add(fp_divide(fp_multiply_int(load_avg, 2),
-                    fp_add_int(fp_multiply_int(load_avg, 2), 1)), t->nice);
-
-    // t->priority = PRI_MAX - (t->recent_cpu / 4) - (t->nice * 2);
-    t->priority = PRI_MAX - fp_toint(fp_subtract(fp_divide_int(t->recent_cpu,
-                    4), fp_multiply_int(t->nice, 2)));
-  }
-
   /* Stack frame for kernel_thread(). */
   kf = alloc_frame (t, sizeof *kf);
   kf->eip = NULL;
@@ -270,6 +269,12 @@ thread_block (void)
   ASSERT (!intr_context ());
   ASSERT (intr_get_level () == INTR_OFF);
 
+  if (thread_current () != idle_thread)
+  {
+    ASSERT (ready_threads > 0);
+    ready_threads --;
+  }
+
   thread_current ()->status = THREAD_BLOCKED;
   schedule ();
 }
@@ -292,9 +297,9 @@ thread_unblock (struct thread *t)
   old_level = intr_disable ();
   ASSERT (t->status == THREAD_BLOCKED);
   list_push_back (&(priority_lists[t->priority]), &t->elem);
-  ready_threads ++;
   //  list_push_back (&ready_list, &t->elem);
   t->status = THREAD_READY;
+  ready_threads ++;
   intr_set_level (old_level);
 }
 
@@ -348,6 +353,7 @@ thread_exit (void)
   intr_disable ();
   list_remove (&thread_current()->allelem);
   thread_current ()->status = THREAD_DYING;
+  ready_threads --;
   schedule ();
   NOT_REACHED ();
 }
@@ -366,8 +372,8 @@ thread_yield (void)
   if (cur != idle_thread) 
   {
     list_push_back (&(priority_lists[cur->priority]), &cur->elem);
-    ready_threads ++;
   }
+
   cur->status = THREAD_READY;
   schedule ();
   intr_set_level (old_level);
@@ -520,9 +526,27 @@ init_thread (struct thread *t, const char *name, int priority)
   t->status = THREAD_BLOCKED;
   strlcpy (t->name, name, sizeof t->name);
   t->stack = (uint8_t *) t + PGSIZE;
-  t->priority = priority;
   t->nice = 0;
-  t->recent_cpu = 0;
+
+  if (thread_mlfqs)
+  {
+    struct thread *cur = running_thread ();
+    if (cur == initial_thread)
+    {
+      t->recent_cpu = 0;
+      t->priority = PRI_MIN;
+    }
+    else {
+      t->recent_cpu = cur->recent_cpu;
+      t->nice = cur->nice;
+      t->priority = cur->priority;
+    }
+  }
+  else {
+    t->recent_cpu = 0;
+    t->priority = priority;
+  }
+
   t->magic = THREAD_MAGIC;
   old_level = intr_disable ();
   list_push_back (&all_list, &t->allelem);
@@ -648,3 +672,5 @@ allocate_tid (void)
 /* Offset of `stack' member within `struct thread'.
    Used by switch.S, which can't figure it out on its own. */
 uint32_t thread_stack_ofs = offsetof (struct thread, stack);
+
+// vim:ts=2:sw=2:et:

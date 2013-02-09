@@ -75,4 +75,4 @@ fp_divide_int(fp a, int n)
   return (fp) (a / n);
 }
 
-// vim:ts=2:sw=2:et
+// vim:ts=2:sw=2:et:
