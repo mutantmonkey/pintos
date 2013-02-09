@@ -295,7 +295,6 @@ thread_unblock (struct thread *t)
   old_level = intr_disable ();
   ASSERT (t->status == THREAD_BLOCKED);
   list_push_back (&(priority_lists[t->effective]), &t->elem);
-  ready_threads ++;
   t->status = THREAD_READY;
   ready_threads ++;
   intr_set_level (old_level);
@@ -370,7 +369,6 @@ thread_yield (void)
   if (cur != idle_thread) 
   {
     list_push_back (&(priority_lists[cur->effective]), &cur->elem);
-    ready_threads ++;
   }
 
   cur->status = THREAD_READY;
