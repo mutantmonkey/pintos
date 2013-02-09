@@ -541,12 +541,12 @@ init_thread (struct thread *t, const char *name, int priority)
     if (cur == initial_thread)
     {
       t->recent_cpu = 0;
-      t->priority = PRI_MIN;
+      t->priority = t->effective = PRI_MIN;
     }
     else {
       t->recent_cpu = cur->recent_cpu;
       t->nice = cur->nice;
-      t->priority = cur->priority;
+      t->priority = t->effective = cur->priority;
     }
   }
   else {
