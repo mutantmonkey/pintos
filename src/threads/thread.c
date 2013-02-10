@@ -40,10 +40,10 @@ static struct thread *initial_thread;
 static struct lock tid_lock;
 
 /* Load average: average number of ready-to-run threads over past minute. */
-fp load_avg;
+static fp load_avg;
 
 /* Number of threads running or ready to run. */
-int ready_threads;
+static int ready_threads;
 
 /* Stack frame for kernel_thread(). */
 struct kernel_thread_frame 
