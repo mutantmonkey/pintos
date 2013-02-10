@@ -40,10 +40,12 @@ static struct thread *initial_thread;
 static struct lock tid_lock;
 
 /* Load average: average number of ready-to-run threads over past minute. */
-fp load_avg;
+static fp load_avg;
+static fp load_coeff;
+static fp ready_coeff;
 
 /* Number of threads running or ready to run. */
-int ready_threads;
+static int ready_threads;
 
 /* Stack frame for kernel_thread(). */
 struct kernel_thread_frame 
@@ -98,7 +100,9 @@ thread_init (void)
   ASSERT (intr_get_level () == INTR_OFF);
 
   ready_threads = 1;
-  load_avg = 0;
+  load_avg = fp_convert(0);
+  load_coeff = fp_divide_int(fp_convert(59), 60);
+  ready_coeff = fp_divide_int(fp_convert(1), 60);
 
   lock_init (&tid_lock);
   list_init (&all_list);
@@ -141,36 +145,56 @@ thread_tick (void)
 
   if (thread_mlfqs)
   {
-    if (timer_ticks() % TIMER_FREQ == 0)
-    {
-      // load_avg = (59/60)*load_avg + (1/60)*ready_threads
-      load_avg = fp_add(fp_multiply(fp_divide_int(fp_convert(59), 60), load_avg),
-              fp_multiply_int(fp_divide_int(fp_convert(1), 60), ready_threads));
-
-      // t->recent_cpu = (2*load_avg) / (2*load_avg + 1) * t->recent_cpu + t->nice
-      t->recent_cpu = fp_add_int(fp_multiply(fp_divide(fp_multiply_int(load_avg, 2),
-                      fp_add_int(fp_multiply_int(load_avg, 2), 1)),
-                  t->recent_cpu), t->nice);
-    }
-    else {
-      t->recent_cpu = fp_add_int(t->recent_cpu, 1);
-    }
-
     if (timer_ticks () % 4 == 0)
     {
-      // t->priority = PRI_MAX - (t->recent_cpu / 4) - (t->nice * 2);
-      t->priority = PRI_MAX - fp_toint(fp_subtract_int(fp_divide_int(t->recent_cpu,
-                      4), t->nice * 2));
+      struct thread *up;
+      struct list_elem *e;
+      for (e = list_begin(&all_list); e != list_end(&all_list);
+	   e = list_next(e)) 
+	{
+	  up = list_entry(e, struct thread, allelem);
+	  // t->priority = PRI_MAX - (t->recent_cpu / 4) - (t->nice * 2);
+	  if (up != idle_thread)
+	    {
+	    up->effective = fp_toint(fp_subtract_int(fp_subtract(fp_convert(PRI_MAX), 
+							 fp_divide_int(up->recent_cpu, 4)), up->nice * 2));
+	    
+	    if (up->effective < PRI_MIN)
+	      up->effective = PRI_MIN;
+	    if (up->effective > PRI_MAX)
+	      up->effective = PRI_MAX;
+	    
+	    if (up->status == THREAD_READY)
+	      thread_update_priority(up);
 
-      if (t->priority < PRI_MIN)
-        t->priority = PRI_MIN;
-      if (t->priority > PRI_MAX)
-        t->priority = PRI_MAX;
+	    ASSERT (up->effective >= PRI_MIN);
+	    ASSERT (up->effective <= PRI_MAX);
+	    }
+	}
+    }
 
-      ASSERT (t->priority >= PRI_MIN);
-      ASSERT (t->priority <= PRI_MAX);
+    if (t != idle_thread)
+      t->recent_cpu = fp_add_int(t->recent_cpu, 1);
 
-      t->effective = t->priority;
+    if (timer_ticks() % TIMER_FREQ == 0)
+    {
+      struct thread *up;
+      struct list_elem *e;
+
+      // load_avg = (59/60)*load_avg + (1/60)*ready_threads
+      load_avg = fp_add(fp_multiply(load_coeff, load_avg),
+			fp_multiply_int(ready_coeff, ready_threads));
+
+      for (e = list_begin(&all_list); e != list_end(&all_list);
+	   e = list_next(e)) 
+	{
+	  up = list_entry(e, struct thread, allelem);
+	  if (up != idle_thread)
+	  // t->recent_cpu = (2*load_avg) / (2*load_avg + 1) * t->recent_cpu + t->nice
+	  up->recent_cpu = fp_add_int(fp_multiply(fp_divide(fp_multiply_int(load_avg, 2),
+                      fp_add_int(fp_multiply_int(load_avg, 2), 1)),
+                  up->recent_cpu), up->nice);
+	}
     }
   }
 
@@ -420,7 +444,29 @@ thread_get_priority (void)
 void
 thread_set_nice (int nice UNUSED) 
 {
-  thread_current ()->nice = nice;
+  if(!thread_mlfqs) return;
+  //check if the nice is in the correct range
+  ASSERT (nice <= 20);
+  ASSERT (nice >= -20);
+
+  thread_current()->nice = nice;
+  struct thread *t = thread_current ();
+
+  int new = fp_toint(fp_subtract_int(fp_subtract(fp_convert(PRI_MAX), fp_divide_int(t->recent_cpu, 4)), t->nice * 2));
+  if (new > PRI_MAX)
+    new = PRI_MAX;
+  if (new < PRI_MIN) new = PRI_MIN;
+
+  enum intr_level old_level = intr_disable();
+  thread_current()->effective = new;
+  intr_set_level(old_level);
+  int i;
+  for(i = new + 1;i <= PRI_MAX; i++) {
+    if (!list_empty(&(priority_lists[i]))) {
+                thread_yield();
+                break;
+        }
+  }
 }
 
 /* Returns the current thread's nice value. */
@@ -534,24 +580,20 @@ init_thread (struct thread *t, const char *name, int priority)
   list_init(&t->holding);
   sema_init(&t->pri, 1);
   t->nice = 0;
+  t->recent_cpu = 0;
 
   if (thread_mlfqs)
   {
     struct thread *cur = running_thread ();
     if (cur == initial_thread)
     {
-      t->recent_cpu = 0;
-      t->priority = t->effective = PRI_MIN;
+      t->effective = PRI_MIN;
     }
     else {
       t->recent_cpu = cur->recent_cpu;
       t->nice = cur->nice;
-      t->priority = t->effective = cur->priority;
+      t->effective = cur->effective;
     }
-  }
-  else {
-    t->recent_cpu = 0;
-    t->priority = priority;
   }
 
   t->magic = THREAD_MAGIC;
