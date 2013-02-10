@@ -127,6 +127,23 @@ careful implementation.
 >> `struct' member, global or static variable, `typedef', or
 >> enumeration.  Identify the purpose of each in 25 words or less.
 
+static fp load_avg;
+/* This variable is used to store the current load average. */
+
+static int ready_threads;
+/* This variable holds the current number of "ready" threads used by the MLFQS
+   scheduler for load average calculations. */
+
+struct thread {
+    int nice;
+    /* This variable holds the thread's nice value used for the MLFQS
+       scheduler. */
+
+    int recent_cpu;
+    /* This variable holds the thread's recent_cpu value used for the MLFQS
+       scheduler. */
+}
+
 ---- ALGORITHMS ----
 
 >> C2: Suppose threads A, B, and C have nice values 0, 1, and 2.  Each
@@ -137,23 +154,31 @@ careful implementation.
 timer  recent_cpu    priority   thread
 ticks   A   B   C   A   B   C   to run
 -----  --  --  --  --  --  --   ------
- 0
- 4
- 8
-12
-16
-20
-24
-28
-32
-36
+ 0      0   0   0  63  61  59   A
+ 4      4   0   0  62  61  59   A
+ 8      8   0   0  61  61  59   A
+12     12   0   0  60  61  59   B
+16     12   4   0  60  60  59   B
+20     12   8   0  60  59  59   A
+24     16   8   0  59  59  59   A
+28     20   8   0  58  59  59   B
+32     20  12   0  58  58  59   C
+36     20  12   4  58  58  58   C
 
 >> C3: Did any ambiguities in the scheduler specification make values
 >> in the table uncertain?  If so, what rule did you use to resolve
 >> them?  Does this match the behavior of your scheduler?
 
+Yes, I used the rule that the currently running thread should not be switched
+if there is a thread at the same priority. This matches the behavior of my
+scheduler.
+
 >> C4: How is the way you divided the cost of scheduling between code
 >> inside and outside interrupt context likely to affect performance?
+
+The amount of code in the interrupt context could potentially cause problems if
+it takes too long to execute, for example, if too many threads are running for
+their recent_cpu to be updated in a single tick.
 
 ---- RATIONALE ----
 
@@ -161,6 +186,11 @@ ticks   A   B   C   A   B   C   to run
 >> disadvantages in your design choices.  If you were to have extra
 >> time to work on this part of the project, how might you choose to
 >> refine or improve your design?
+
+My design could be improved by splitting the load_avg, recent_cpu, and priority
+updates to separate functions for clarity. If I had extra time, I would improve
+my implementation of fixed-point numbers to use a properly-defined type instead
+of a renamed int.
 
 >> C6: The assignment explains arithmetic for fixed-point math in
 >> detail, but it leaves it open to you to implement it.  Why did you

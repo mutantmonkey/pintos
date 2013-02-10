@@ -142,6 +142,7 @@ void
 thread_tick (void) 
 {
   struct thread *t = thread_current ();
+  fp coeff;
 
   if (thread_mlfqs)
   {
