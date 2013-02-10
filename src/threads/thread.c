@@ -142,7 +142,6 @@ void
 thread_tick (void) 
 {
   struct thread *t = thread_current ();
-  fp coeff;
 
   if (thread_mlfqs)
   {
@@ -579,7 +578,6 @@ init_thread (struct thread *t, const char *name, int priority)
   t->priority = t->effective = priority;
   t->waiting_for = NULL;
   list_init(&t->holding);
-  sema_init(&t->pri, 1);
   t->nice = 0;
   t->recent_cpu = 0;
 

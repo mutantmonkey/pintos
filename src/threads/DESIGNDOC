@@ -92,20 +92,70 @@ careful implementation.
 >> `struct' member, global or static variable, `typedef', or
 >> enumeration.  Identify the purpose of each in 25 words or less.
 
+static struct list priority_lists[64] /* Lists containing THREAD_READY
+       threads where the index is the priority. */ 
+int effective; (in struct thread) /* Indicates what the effective priority
+       is, whether inherited or from mlfqs. */ 
+struct list holding; (in struct thread) /* A list of all the locks this 
+       thread is holding. */
+struct lock *waiting_for; (in struct thread) /* A pointer to the lock
+       the thread is currently blocked on. */
+struct list_elem elem; (in struct lock) /* Allows tha lock to be inserted 
+       into a threads holding list. */
+
 >> B2: Explain the data structure used to track priority donation.
 >> Use ASCII art to diagram a nested donation.  (Alternately, submit a
 >> .png file.)
+
+A has donated to B and B has donated to C.
+
+    9    8    7                9   10   10              9   10
+    A -> C -> D     becomes    A -> C -> D    becomes   A -> C
+    B ---^	    	       B ---^                   B ---^
+   10                         10                       10
+
+Since each thread knows what locks it own and they know that the first
+thread waiting for the lock must have the highest priority (explained
+below) then the thread traverses a list of the locks that it holds and
+locks at the first waiter in the waiters list for each lock and picks
+the highest as its new effective priority. Thus giving back a donated
+priority is done in O(n) time.
 
 ---- ALGORITHMS ----
 
 >> B3: How do you ensure that the highest priority thread waiting for
 >> a lock, semaphore, or condition variable wakes up first?
 
+In the case of locks and semaphores, I insert the threads into the
+waiting list in order by effective priority so that the first element
+in the waiting list is also the highest priority thread and therefore
+the one that should be woken first. In the case of a condition
+variable, I iterate through every semaphore_elem and each waiter list
+within its semaphore member until I arrive at a maximum such thread,
+then I select that thread to proceed. It's not an elegant solution, but
+it works.
+
 >> B4: Describe the sequence of events when a call to lock_acquire()
 >> causes a priority donation.  How is nested donation handled?
 
+The first step is that the lock is checked to make sure no one is
+holding it. If someone is then we define the parent thread to be the
+one waiting for a lock and the child thread to be the thread holding
+such lock. Then we recursively iterate through this structure donating
+the parent's effective priority to the child's until either we
+encounter a child who holds no lock, or a child that is ready to
+run. If the child is ready to run then we update its position in the
+priority_lists and move on. Thus the child receives a nested donation
+and priority inversion is avoided.
+
 >> B5: Describe the sequence of events when lock_release() is called
 >> on a lock that a higher-priority thread is waiting for.
+
+When a lock is released that a higher-priority thread is waiting for
+then because the waiters for the lock are sorted in order of priority
+then the maximum such waiter is removed from the list using list_max
+and unblocked. Then because a thread was unblocked, the releaser
+yields and the higher-priority thread is allowed to run.
 
 ---- SYNCHRONIZATION ----
 
@@ -113,10 +163,34 @@ careful implementation.
 >> how your implementation avoids it.  Can you use a lock to avoid
 >> this race?
 
+A lock is attempting to be acquired and priority donation occurs on
+thread A, then thread A is context switched in and calls
+thread_set_priority is called so that the new priority is set to be
+above the donation. Then the donation is no longer necessary and in
+fact, thread A may be the highest priority thread waiting for the
+lock. In my implementation interrupts are turned off because the
+implementation has small overhead, but a semaphore could've been used
+to avoid this. That said, it required more thought than I had time to
+invest.
+
+
 ---- RATIONALE ----
 
 >> B7: Why did you choose this design?  In what ways is it superior to
 >> another design you considered?
+
+I considered many designs while attempting to implement priority
+scheduling. The predominant reason I chose this design is because that
+it was more intuitive to implement and overall cleaner to write and
+think about. That said, it certainly suffers from some excessive
+overhead in some places, such as thread_refresh_priority(). I
+considered using more complex structures and designs like not using an
+array of lists, but a single sorted ready_list, but decided against
+that because I could at least be sure when an invalid priority was
+inserted into the ready queue. Complex designs also suffer from more
+complex debugging and it's reasonable to suggest that I was barely
+capable of debugging the simpler design, let alone something more
+powerful.
 
 			  ADVANCED SCHEDULER
 			  ==================

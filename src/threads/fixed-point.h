@@ -1,3 +1,5 @@
+#ifndef THREADS_FIXED_H
+#define THREADS_FIXED_H
 #include <debug.h>
 
 #define P 17
@@ -76,3 +78,4 @@ fp_divide_int(fp a, int n)
 }
 
 // vim:ts=2:sw=2:et:
+#endif /* threads/fixed-point.h */
