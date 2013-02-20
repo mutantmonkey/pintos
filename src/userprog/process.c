@@ -28,7 +28,8 @@ static bool load (const char *cmdline, void (**eip) (void), void **esp);
 tid_t
 process_execute (const char *file_name) 
 {
-  char *fn_copy;
+  char *fn_copy, *fn;
+  const char *arg;
   tid_t tid;
 
   /* Make a copy of FILE_NAME.
@@ -36,8 +37,25 @@ process_execute (const char *file_name)
   fn_copy = palloc_get_page (0);
   if (fn_copy == NULL)
     return TID_ERROR;
-  strlcpy (fn_copy, file_name, PGSIZE);
 
+  strlcpy (fn_copy, file_name, PGSIZE);
+  arg = file_name;
+  fn = fn_copy;
+  while (*arg != '\0')
+    {
+      while (*arg != ' ' && *arg != '\t')
+	{
+	  *fn = *arg;
+	  fn++;
+	  arg++;
+	}
+      *fn = '\0';
+      fn++;
+      while (*arg == ' ' || *arg == '\t')
+	arg++;
+    }
+  *fn = '\0';
+ 
   /* Create a new thread to execute FILE_NAME. */
   tid = thread_create (file_name, PRI_DEFAULT, start_process, fn_copy);
   if (tid == TID_ERROR)
@@ -50,16 +68,49 @@ process_execute (const char *file_name)
 static void
 start_process (void *file_name_)
 {
+
   char *file_name = file_name_;
   struct intr_frame if_;
   bool success;
-
+  char *ptrs[128];
+  int argc = 0, i = 0;
+  
   /* Initialize interrupt frame and load executable. */
   memset (&if_, 0, sizeof if_);
   if_.gs = if_.fs = if_.es = if_.ds = if_.ss = SEL_UDSEG;
   if_.cs = SEL_UCSEG;
   if_.eflags = FLAG_IF | FLAG_MBS;
   success = load (file_name, &if_.eip, &if_.esp);
+  
+  while (*file_name != '\0' && *(file_name + 1) != '\0')
+    {
+      size_t len = strlen(file_name) + 1;
+      if_.esp -= len;
+      ptrs[i++] = if_.esp;
+      memcpy (if_.esp, file_name, len);
+      file_name += len;
+      argc++;
+    }
+
+  if_.esp = ((uint32_t)if_.esp & ~3);
+  if_.esp -= 4;
+  *(int *)(if_.esp) = 0;
+
+  for (i = argc - 1; i >= 0; i--)
+    {
+      if_.esp -= 4;
+      *(void **)(if_.esp) = ptrs[i];
+      printf("%p\n", if_.esp);
+    }
+  if_.esp -= 4;
+  *(char **)(if_.esp) = (if_.esp + 8);
+  if_.esp -= 4;
+  *(int *)(if_.esp) = argc;
+  if_.esp -= 4;
+  *(int *)(if_.esp) = 0;
+
+  file_name = file_name_;
+  hex_dump(PHYS_BASE - 196, PHYS_BASE - 196, 196, true);
 
   /* If load failed, quit. */
   palloc_free_page (file_name);
@@ -437,7 +488,7 @@ setup_stack (void **esp)
     {
       success = install_page (((uint8_t *) PHYS_BASE) - PGSIZE, kpage, true);
       if (success)
-        *esp = PHYS_BASE;
+	*esp = PHYS_BASE;
       else
         palloc_free_page (kpage);
     }
