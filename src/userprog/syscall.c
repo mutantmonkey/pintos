@@ -21,7 +21,7 @@ static void
 syscall_handler (struct intr_frame *f) 
 {
   int *p = f->esp;
-  if (!is_user_vaddr (p))
+  if (!is_user_vaddr (p) || !is_user_vaddr (p + 1))
     sys_exit (-1);
 
   switch (*p) {
