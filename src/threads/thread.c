@@ -578,7 +578,7 @@ init_thread (struct thread *t, const char *name, int priority)
   t->priority = t->effective = priority;
   t->waiting_for = NULL;
   list_init(&t->holding);
-  hash_init(*t->fd_table, fd_hash_func, fd_hash_less_func, NULL);
+  hash_init(&t->fd_table, fd_hash_func, fd_hash_less_func, NULL);
   t->nice = 0;
   t->recent_cpu = 0;
 
@@ -749,6 +749,21 @@ thread_refresh_priority ()
 	  cur->effective = waiter->effective;
 	}
     }
+}
+
+unsigned fd_hash_func (const struct hash_elem *e, void *aux UNUSED)
+{
+  struct fd_entry *entry = hash_entry (e, struct fd_entry, elem);
+  return hash_int (entry->fd);
+}
+
+bool fd_hash_less_func (const struct hash_elem *a,
+			const struct hash_elem *b,
+			void *aux UNUSED)
+{
+  if (fd_hash_func (a, NULL) < fd_hash_func(b, NULL))
+    return true;
+  return false;
 }
 /* Offset of `stack' member within `struct thread'.
    Used by switch.S, which can't figure it out on its own. */

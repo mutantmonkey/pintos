@@ -5,12 +5,29 @@
 #include "threads/thread.h"
 #include "threads/vaddr.h"
 #include "devices/shutdown.h"
+#include "filesys/file.h"
+#include "filesys/filesys.h"
+#include <hash.h>
 
 static void syscall_handler (struct intr_frame *);
 
-#define FIRST(f) (*(f->esp + 8))
-#define SECOND(f) (*(f_>esp + 12))
-#define THIRD(f) (*(f->esp + 16))
+static void sys_halt (void);
+static int sys_exit (int status);
+//pid_t sys_exec (const char *file);
+//int sys_wait (pid_t);
+static bool sys_create (const char *file, unsigned initial_size);
+static bool sys_remove (const char *file);
+static int sys_open (const char *file);
+static unsigned sys_filesize (int fd);
+static int sys_read (int fd, void *buffer, unsigned length);
+static int sys_write (int fd, const void *buffer, unsigned length);
+//void sys_seek (int fd, unsigned position);
+//unsigned sys_tell (int fd);
+//void sys_close (int fd);
+
+#define FIRST(f) (*(f + 1))
+#define SECOND(f) (*(f + 2))
+#define THIRD(f) (*(f + 3))
 
 void
 syscall_init (void) 
@@ -37,14 +54,14 @@ syscall_handler (struct intr_frame *f)
     case SYS_WAIT:
       break;
     case SYS_CREATE:
-      sys_create (FIRST(f), SECOND(f));
+      sys_create ((char *)FIRST(p), SECOND(p));
       break;
     case SYS_REMOVE:
       break;
     case SYS_OPEN:
       break;
     case SYS_FILESIZE:
-      sys_filesize (FIRST(f));
+      sys_filesize (FIRST(p));
       break;
     case SYS_READ:
       break;
@@ -78,7 +95,7 @@ sys_exit (int status UNUSED)
 static bool
 sys_create (const char *file, unsigned initial_size)
 {
-  if (file >= PHYS_BASE)
+  if ((void *)file >= PHYS_BASE)
     return false;
   return filesys_create (file, initial_size);
 }
@@ -92,7 +109,7 @@ is_valid_fd (int fd)
 static struct file *
 get_file (int fd) {
   struct thread *t = thread_current ();
-  struct fd_entry temp_entry = {fd, {0, 0}, NULL};
+  struct fd_entry temp_entry = {fd, {{0, 0}}, NULL};
   struct hash_elem *entry = hash_find (&t->fd_table,
 				       &temp_entry.elem);
   if (entry == NULL)
@@ -110,7 +127,7 @@ sys_filesize (int fd) {
 
   struct file *file = get_file (fd);
   if (file != NULL)
-    return file_length (f->file);
+    return file_length (file);
   return 0;
 }
 
@@ -121,7 +138,7 @@ sys_read (int fd, void *buffer, unsigned length)
     return 0;
   if (fd == 0)
     {
-      *buffer++ = input_getc ();
+      *(char *)(buffer++) = input_getc ();
     }
 
   struct file *file = get_file (fd);

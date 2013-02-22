@@ -6,6 +6,12 @@
 #include <stdint.h>
 #include "synch.h"
 #include "fixed-point.h"
+#include <hash.h>
+
+unsigned fd_hash_func (const struct hash_elem *, void *);
+bool fd_hash_less_func (const struct hash_elem *, 
+			const struct hash_elem *,
+ 			void *);
 
 /* States in a thread's life cycle. */
 enum thread_status
@@ -119,21 +125,6 @@ struct fd_entry {
   struct hash_elem elem;
   struct file *file;
 };
-
-unsigned fd_hash_func (const struct hash_elem *e, void *aux UNUSED)
-{
-  struct fd_entry *entry = hash_entry (e, struct fd_entry, elem);
-  return hash_int (entry->fd);
-}
-
-bool fd_hash_less_func (const struct hash_elem *a,
-			const struct hash_elem *b,
-			void *aux UNUSED)
-{
-  if (fd_hash_func (*a, NULL) < fd_hash_func(*b, NULL))
-    return true;
-  return false;
-}
 
 
 /* If false (default), use round-robin scheduler.
