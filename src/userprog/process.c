@@ -82,8 +82,11 @@ start_process (void *file_name_)
   if_.eflags = FLAG_IF | FLAG_MBS;
   success = load (file_name, &if_.eip, &if_.esp);
   
-  while (*file_name != '\0' && *(file_name + 1) != '\0')
+  // Check for four consecutive null pointers as end
+  // for the tokenized string
+  while (*(int *)(file_name) != 0)
     {
+      // Write the strings onto the top of the stack
       size_t len = strlen(file_name) + 1;
       if_.esp -= len;
       ptrs[i++] = if_.esp;
@@ -92,25 +95,29 @@ start_process (void *file_name_)
       argc++;
     }
 
-  if_.esp = ((uint32_t)if_.esp & ~3);
+  // Word align and then write the terminating null
+  if_.esp = (void **)((uint32_t)if_.esp & ~3);
   if_.esp -= 4;
   *(int *)(if_.esp) = 0;
 
+  // Push the pointers to the args onto the stack backwards
   for (i = argc - 1; i >= 0; i--)
     {
       if_.esp -= 4;
       *(void **)(if_.esp) = ptrs[i];
-      printf("%p\n", if_.esp);
     }
+  // Write the location of the first arg on the stack
   if_.esp -= 4;
   *(char **)(if_.esp) = (if_.esp + 8);
+  // Write argc onto the stack
   if_.esp -= 4;
   *(int *)(if_.esp) = argc;
+  // Write the return address
   if_.esp -= 4;
   *(int *)(if_.esp) = 0;
 
+  // Reset the file name so we can free the page.
   file_name = file_name_;
-  hex_dump(PHYS_BASE - 196, PHYS_BASE - 196, 196, true);
 
   /* If load failed, quit. */
   palloc_free_page (file_name);

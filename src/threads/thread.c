@@ -442,7 +442,7 @@ thread_get_priority (void)
 
 /* Sets the current thread's nice value to NICE. */
 void
-thread_set_nice (int nice UNUSED) 
+thread_set_nice (int nice) 
 {
   if(!thread_mlfqs) return;
   //check if the nice is in the correct range
@@ -578,6 +578,7 @@ init_thread (struct thread *t, const char *name, int priority)
   t->priority = t->effective = priority;
   t->waiting_for = NULL;
   list_init(&t->holding);
+  hash_init(*t->fd_table, fd_hash_func, fd_hash_less_func, NULL);
   t->nice = 0;
   t->recent_cpu = 0;
 

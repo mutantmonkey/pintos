@@ -8,8 +8,9 @@
 
 static void syscall_handler (struct intr_frame *);
 
-void sys_halt (void);
-int sys_exit (int status);
+#define FIRST(f) (*(f->esp + 8))
+#define SECOND(f) (*(f_>esp + 12))
+#define THIRD(f) (*(f->esp + 16))
 
 void
 syscall_init (void) 
@@ -36,12 +37,14 @@ syscall_handler (struct intr_frame *f)
     case SYS_WAIT:
       break;
     case SYS_CREATE:
+      sys_create (FIRST(f), SECOND(f));
       break;
     case SYS_REMOVE:
       break;
     case SYS_OPEN:
       break;
     case SYS_FILESIZE:
+      sys_filesize (FIRST(f));
       break;
     case SYS_READ:
       break;
@@ -59,17 +62,89 @@ syscall_handler (struct intr_frame *f)
   }
 }
 
-void
+static void
 sys_halt (void)
 {
   shutdown_power_off ();
 }
 
-int
+static int
 sys_exit (int status UNUSED)
 {
   thread_exit ();
   // TODO: deal with parent processes
 }
+
+static bool
+sys_create (const char *file, unsigned initial_size)
+{
+  if (file >= PHYS_BASE)
+    return false;
+  return filesys_create (file, initial_size);
+}
+
+static inline bool
+is_valid_fd (int fd)
+{
+  return (fd != 0 && fd != 1) ? true : false;
+}
+
+static struct file *
+get_file (int fd) {
+  struct thread *t = thread_current ();
+  struct fd_entry temp_entry = {fd, {0, 0}, NULL};
+  struct hash_elem *entry = hash_find (&t->fd_table,
+				       &temp_entry.elem);
+  if (entry == NULL)
+    return NULL;
+
+  struct fd_entry *f = hash_entry(entry, struct fd_entry, elem);
+  return f->file;
+}
+  
+
+static unsigned 
+sys_filesize (int fd) {
+  if (!is_valid_fd(fd))
+    return 0;
+
+  struct file *file = get_file (fd);
+  if (file != NULL)
+    return file_length (f->file);
+  return 0;
+}
+
+static int
+sys_read (int fd, void *buffer, unsigned length)
+{
+  if (fd == 1)
+    return 0;
+  if (fd == 0)
+    {
+      *buffer++ = input_getc ();
+    }
+
+  struct file *file = get_file (fd);
+  if (file != NULL)
+    return file_read (file, buffer, length);
+  return 0;
+}
+
+static int
+sys_write (int fd, const void *buffer, unsigned length)
+{
+  if (fd == 0)
+    return 0;
+  if (fd == 1 && length <= 512)
+    {
+      putbuf (buffer, length);
+    }
+
+  struct file *file = get_file (fd);
+  if (file != NULL)
+    return file_write (file, buffer, length);
+  return 0;
+}
+
 
 // vim:ts=2:sw=2:et:

@@ -94,6 +94,7 @@ struct thread
     struct list holding;
     struct lock *waiting_for;           /* Lock this thread is waiting for. */
     struct list_elem allelem;           /* List element for all threads list. */
+    struct hash fd_table;               /* A hash table of all of the file descriptors */
 
     int nice;                           /* Niceness.*/
     fp recent_cpu;                     /* Thread's recent CPU. */
@@ -112,6 +113,28 @@ struct thread
     /* Owned by thread.c. */
     unsigned magic;                     /* Detects stack overflow. */
   };
+
+struct fd_entry {
+  int fd;
+  struct hash_elem elem;
+  struct file *file;
+};
+
+unsigned fd_hash_func (const struct hash_elem *e, void *aux UNUSED)
+{
+  struct fd_entry *entry = hash_entry (e, struct fd_entry, elem);
+  return hash_int (entry->fd);
+}
+
+bool fd_hash_less_func (const struct hash_elem *a,
+			const struct hash_elem *b,
+			void *aux UNUSED)
+{
+  if (fd_hash_func (*a, NULL) < fd_hash_func(*b, NULL))
+    return true;
+  return false;
+}
+
 
 /* If false (default), use round-robin scheduler.
    If true, use multi-level feedback queue scheduler.
