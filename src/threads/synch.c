@@ -49,10 +49,12 @@ sema_init (struct semaphore *sema, unsigned value)
   sema->value = value;
   list_init (&sema->waiters);
 }
-
+bool cond_effective_less (const struct list_elem *a,
+			  const struct list_elem *b,
+			  void *aux UNUSED);
 bool effective_less (const struct list_elem *a,
 		    const struct list_elem *b,
-		    void *aux)
+		    void *aux UNUSED)
 {
   return list_entry (a, struct thread, elem)->effective < 
     list_entry (b, struct thread, elem)->effective;
@@ -311,7 +313,7 @@ cond_init (struct condition *cond)
 }
 
 bool cond_effective_less (const struct list_elem *a, 
-			  const struct list_elem *b, void *aux)
+			  const struct list_elem *b, void *aux UNUSED)
 {
   return list_entry(a, struct semaphore_elem, elem)->effective <
     list_entry(b, struct semaphore_elem, elem)->effective;

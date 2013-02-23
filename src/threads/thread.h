@@ -94,6 +94,7 @@ struct thread
     struct list holding;
     struct lock *waiting_for;           /* Lock this thread is waiting for. */
     struct list_elem allelem;           /* List element for all threads list. */
+    struct file *fd_table[128];
 
     int nice;                           /* Niceness.*/
     fp recent_cpu;                     /* Thread's recent CPU. */

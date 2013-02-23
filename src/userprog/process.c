@@ -82,7 +82,7 @@ start_process (void *file_name_)
   if_.eflags = FLAG_IF | FLAG_MBS;
   success = load (file_name, &if_.eip, &if_.esp);
   
-  while (*file_name != '\0' && *(file_name + 1) != '\0')
+  while (*(int *)file_name != 0)
     {
       size_t len = strlen(file_name) + 1;
       if_.esp -= len;
@@ -100,17 +100,16 @@ start_process (void *file_name_)
     {
       if_.esp -= 4;
       *(void **)(if_.esp) = ptrs[i];
-      printf("%p\n", if_.esp);
     }
   if_.esp -= 4;
-  *(char **)(if_.esp) = (if_.esp + 8);
+  *(char **)(if_.esp) = (if_.esp + 4);
   if_.esp -= 4;
   *(int *)(if_.esp) = argc;
   if_.esp -= 4;
   *(int *)(if_.esp) = 0;
 
+  //  hex_dump(PHYS_BASE - 64, PHYS_BASE - 64, 64, true);
   file_name = file_name_;
-  hex_dump(PHYS_BASE - 196, PHYS_BASE - 196, 196, true);
 
   /* If load failed, quit. */
   palloc_free_page (file_name);
@@ -148,6 +147,10 @@ process_exit (void)
 {
   struct thread *cur = thread_current ();
   uint32_t *pd;
+  int i;
+  for (i = 0; i < 128; i++)
+    if (cur->fd_table[i] != NULL)
+      file_close (cur->fd_table[i]);
 
   /* Destroy the current process's page directory and switch back
      to the kernel-only page directory. */
