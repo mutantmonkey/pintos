@@ -144,8 +144,23 @@ start_process (void *file_name_)
    This function will be implemented in problem 2-2.  For now, it
    does nothing. */
 int
-process_wait (tid_t child_tid UNUSED) 
+process_wait (tid_t child_tid) 
 {
+  struct thread *cur = thread_current (); 
+  struct thread *t;
+  struct list_elem *e;
+
+  for (e = list_begin(&cur->children); e != list_end(&cur->children);
+      e = list_next(e))
+  {
+    t = list_entry(e, struct thread, child_elem);
+    if (t != NULL && t->tid == child_tid)
+    {
+      //sema_down (&t->parent_wait);
+      return t->exit_status;
+    }
+  }
+
   return -1;
 }
 
@@ -159,6 +174,9 @@ process_exit (void)
   for (i = 0; i < 128; i++)
     if (cur->fd_table[i] != NULL)
       file_close (cur->fd_table[i]);
+
+  //sema_up (&cur->parent_wait);
+  list_remove (&cur->child_elem);
 
   /* Destroy the current process's page directory and switch back
      to the kernel-only page directory. */

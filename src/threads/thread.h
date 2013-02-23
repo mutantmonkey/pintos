@@ -91,13 +91,18 @@ struct thread
     uint8_t *stack;                     /* Saved stack pointer. */
     int priority;                       /* Priority. */
     int effective;                      /* Inherited priority. */
-    struct list holding;
+    struct list holding;                /* Locks this thread is holding. */
     struct lock *waiting_for;           /* Lock this thread is waiting for. */
     struct list_elem allelem;           /* List element for all threads list. */
     struct file *fd_table[128];         /* An array of file pointers where index is the file descriptor */
 
+    struct list children;               /* Child threads of this thread. */
+    struct list_elem child_elem;        /* List element used in child threads. */
+    struct semaphore parent_wait;       /* Semaphore used for process_wait. */
+    int exit_status;
+
     int nice;                           /* Niceness.*/
-    fp recent_cpu;                     /* Thread's recent CPU. */
+    fp recent_cpu;                      /* Thread's recent CPU. */
 
     /* Shared between thread.c and synch.c. */
     struct list_elem elem;              /* List element. */

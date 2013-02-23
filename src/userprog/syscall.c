@@ -15,9 +15,9 @@ struct lock sys_file_io;
 
 static void syscall_handler (struct intr_frame *);
 static void sys_halt (void);
-void sys_exit (int status);
-//pid_t sys_exec (const char *file);
-//int sys_wait (pid_t);
+//static int sys_exit (int status);
+static pid_t sys_exec (const char *cmd_line);
+static int sys_wait (pid_t pid);
 static bool sys_create (const char *file, unsigned initial_size);
 static bool sys_remove (const char *file);
 static int sys_open (const char *file);
@@ -43,7 +43,9 @@ static void
 syscall_handler (struct intr_frame *f) 
 {
   int *p = f->esp;
-  if (!is_user_vaddr (p) || !is_user_vaddr (p + 1))
+
+  if (!is_user_vaddr (p) || !is_user_vaddr (p + 1) ||
+      !is_user_vaddr (p + 2) || !is_user_vaddr (p + 3))
     sys_exit (-1);
 
   switch (*p) {
@@ -51,11 +53,13 @@ syscall_handler (struct intr_frame *f)
       sys_halt ();
       break;
     case SYS_EXIT:
-      sys_exit (FIRST(p));
+      f->eax = sys_exit (FIRST(p));
       break;
     case SYS_EXEC:
+      f->eax = sys_exec ((char *)FIRST(p));
       break;
     case SYS_WAIT:
+      f->eax = sys_wait (FIRST(p));
       break;
     case SYS_CREATE:
       f->eax = sys_create ((char *)FIRST(p), SECOND(p));
@@ -96,11 +100,28 @@ sys_halt (void)
   shutdown_power_off ();
 }
 
-void
-sys_exit (int status UNUSED)
+int
+sys_exit (int status)
 {
+  thread_current ()->exit_status = status;
+
+  printf("%s: exit(%d)\n", thread_current ()->name, status);
+
   thread_exit ();
-  // TODO: deal with parent processes
+
+  return 0;
+}
+
+static pid_t
+sys_exec (const char *cmd_line)
+{
+  return process_execute (cmd_line);
+}
+
+static int
+sys_wait (pid_t pid)
+{
+  return process_wait (pid);
 }
 
 static bool
@@ -239,13 +260,6 @@ sys_read (int fd, void *buffer, unsigned length)
       return result;
     }
   return -1;
-      *(char *)(buffer++) = input_getc ();
-    }
-
-  struct file *file = get_file (fd);
-  if (file != NULL)
-    return file_read (file, buffer, length);
-  return 0;
 }
 
 static int
@@ -271,6 +285,5 @@ sys_write (int fd, const void *buffer, unsigned length)
     }
   return 0;
 }
-
 
 // vim:ts=2:sw=2:et:
