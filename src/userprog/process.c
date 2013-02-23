@@ -33,6 +33,7 @@ process_execute (const char *file_name)
   char *fn_copy, *fn;
   const char *arg;
   tid_t tid;
+  struct file *file = NULL;
 
   /* Make a copy of FILE_NAME.
      Otherwise there's a race between the caller and load(). */
@@ -55,6 +56,11 @@ process_execute (const char *file_name)
 	arg++;
     }
   *(int *)fn = '\0';
+
+  /* Make sure FILE_NAME exists. */
+  file = filesys_open (file_name);
+  if (file == NULL)
+    return -1;
  
   /* Create a new thread to execute FILE_NAME. */
   tid = thread_create (fn_copy, PRI_DEFAULT, start_process, fn_copy);
