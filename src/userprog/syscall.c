@@ -239,6 +239,13 @@ sys_read (int fd, void *buffer, unsigned length)
       return result;
     }
   return -1;
+      *(char *)(buffer++) = input_getc ();
+    }
+
+  struct file *file = get_file (fd);
+  if (file != NULL)
+    return file_read (file, buffer, length);
+  return 0;
 }
 
 static int
