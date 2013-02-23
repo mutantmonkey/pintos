@@ -39,13 +39,19 @@ syscall_init (void)
   intr_register_int (0x30, 3, INTR_ON, syscall_handler, "syscall");
 }
 
+static inline 
+bool valid_ptr (void *ptr) {
+  return (ptr < PHYS_BASE && ptr != NULL) ? true : false;
+}
+
 static void
 syscall_handler (struct intr_frame *f) 
 {
   int *p = f->esp;
 
   if (!is_user_vaddr (p) || !is_user_vaddr (p + 1) ||
-      !is_user_vaddr (p + 2) || !is_user_vaddr (p + 3))
+      !is_user_vaddr (p + 2) || !is_user_vaddr (p + 3) ||
+      !valid_ptr(p))
     sys_exit (-1);
 
   switch (*p) {
@@ -103,8 +109,7 @@ sys_halt (void)
 int
 sys_exit (int status)
 {
-  thread_current ()->exit_status = status;
-
+  *thread_current ()->exit_status = status;
   printf("%s: exit(%d)\n", thread_current ()->name, status);
 
   thread_exit ();
@@ -115,7 +120,11 @@ sys_exit (int status)
 static pid_t
 sys_exec (const char *cmd_line)
 {
-  return process_execute (cmd_line);
+  if (!valid_ptr((void *)cmd_line))
+    sys_exit (-1);
+  pid_t result = process_execute (cmd_line);
+  sema_down (&thread_current ()->exec_synch);
+  return result;
 }
 
 static int
@@ -127,7 +136,7 @@ sys_wait (pid_t pid)
 static bool
 sys_create (const char *file, unsigned initial_size)
 {
-  if ((void *)file >= PHYS_BASE)
+  if (!valid_ptr((void *)file))
     sys_exit (-1);
 
   lock_acquire(&sys_file_io);
@@ -139,7 +148,7 @@ sys_create (const char *file, unsigned initial_size)
 
 static int sys_open (const char *file)
 {
-  if ((void *)file >= PHYS_BASE)
+  if (!valid_ptr((void *)file))
     sys_exit (-1);
 
   struct thread *t = thread_current ();
@@ -195,7 +204,7 @@ sys_close (int fd)
   if (!is_valid_fd(fd))
     return;
 
-  struct file *f = get_file (fd, false);
+  struct file *f = get_file (fd, true);
   if (f != NULL)
     file_close (f);
 }
@@ -215,7 +224,7 @@ sys_tell (int fd)
 static bool
 sys_remove (const char *file)
 {
-  if ((void *)file >= PHYS_BASE)
+  if (!valid_ptr((void *)file))
     return false;
 
   if (file != NULL)
@@ -243,6 +252,8 @@ sys_filesize (int fd)
 static int
 sys_read (int fd, void *buffer, unsigned length)
 {
+  if (!valid_ptr((void *)buffer))
+    sys_exit (-1);
   if (fd == 1)
     return 0;
   if (fd == 0)
@@ -250,6 +261,8 @@ sys_read (int fd, void *buffer, unsigned length)
       while (length-- > 0)
 	*(char *)(buffer)++ = input_getc ();
     }
+  if (!is_valid_fd(fd))
+    return -1;
 
   struct file *file = get_file (fd, false);
   if (file != NULL)
@@ -265,7 +278,7 @@ sys_read (int fd, void *buffer, unsigned length)
 static int
 sys_write (int fd, const void *buffer, unsigned length)
 {
-  if (buffer >= PHYS_BASE)
+  if (!valid_ptr((void *)buffer))
     sys_exit (-1);
   if (fd == 0)
     return 0;
@@ -274,6 +287,8 @@ sys_write (int fd, const void *buffer, unsigned length)
       putbuf (buffer, length);
       return length;
     }
+  if (!is_valid_fd(fd))
+    return -1;
 
   struct file *file = get_file (fd, false);
   if (file != NULL)

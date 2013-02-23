@@ -149,8 +149,13 @@ page_fault (struct intr_frame *f)
   write = (f->error_code & PF_W) != 0;
   user = (f->error_code & PF_U) != 0;
 
-  if (write || user)
-    sys_exit (-1);
+  // When virtual memory gets implemented, we'll only care that
+  // the page wasn't present at the time. Otherwise, we'll
+  // just assume the user was malicious.
+  f->eip = (void *) f->eax;
+  f->eax = (uint32_t) 0xffffffff;
+  sys_exit(-1);
+  return;
 
   /* To implement virtual memory, delete the rest of the function
      body, and replace it with code that brings in the page to
