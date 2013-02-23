@@ -58,7 +58,7 @@ process_execute (const char *file_name)
   *(int *)fn = '\0';
 
   /* Make sure FILE_NAME exists. */
-  file = filesys_open (file_name);
+  file = filesys_open (fn_copy);
   if (file == NULL)
     return -1;
  
