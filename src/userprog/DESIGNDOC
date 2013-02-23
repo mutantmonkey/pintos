@@ -46,6 +46,8 @@ Andrew Shugarts <rue92@vt.edu>
 >> `struct' member, global or static variable, `typedef', or
 >> enumeration.  Identify the purpose of each in 25 words or less.
 
+No changes were necessary.
+
 ---- ALGORITHMS ----
 
 >> A2: Briefly describe how you implemented argument parsing.  How do
@@ -69,14 +71,73 @@ Andrew Shugarts <rue92@vt.edu>
 >> `struct' member, global or static variable, `typedef', or
 >> enumeration.  Identify the purpose of each in 25 words or less.
 
+struct thread
+{
+  struct file *fd_table[128];       /* Array used to keep track of file
+                                       descriptors the thread has open. */
+
+  struct file *me;                  /* File descriptor for the file being
+                                       executed in this thread. */
+
+  struct list children;             /* List used to keep track of child
+                                       threads of this thread. */
+
+  struct lock child_lock;           /* Lock used for locking the list of
+                                       children. */
+
+  struct list_elem child_elem;      /* List element for the list of
+                                       children. */
+
+  struct thread *parent;            /* Pointer to parent thread. */
+
+  struct semaphore *wait;           /* Semaphore used in process_wait to
+                                       determine when this process exits. */
+
+  struct semaphore exec_synch;      /* Semaphore used when starting a
+                                       thread. */
+
+  int *exit_status;                 /* Pointer to exit status of this
+                                       thread. */
+};
+
+struct exit_status {
+  /* Struct used to keep track of the exit status of a thread. */
+
+	int tid;                          /* Thread ID. */
+
+	struct list_elem elem;            /* List element for this exit status. */
+
+	int status;                       /* Exit status. */
+
+	struct semaphore parent_wait;     /* Semaphore for the parent to wait on the
+	                                     child. */
+
+  struct thread *child;             /* Child thread. */
+};
+
+
+struct lock sys_file_io;            /* Lock used to lock filesystem when
+                                       performing operations. */
+
+typedef int pid_t;                  /* Define pid_t type (in syscall.h) so it
+                                       can be used by syscall.c. */
+
+
 >> B2: Describe how file descriptors are associated with open files.
 >> Are file descriptors unique within the entire OS or just within a
 >> single process?
+
+They are unique with a single process, and they are stored in an array in the
+kernel thread struct.
 
 ---- ALGORITHMS ----
 
 >> B3: Describe your code for reading and writing user data from the
 >> kernel.
+
+When reading and writing user data from the kernel, addresses are validated to
+ensure that they belong to the proper process. If they do not, the program is
+killed.
 
 >> B4: Suppose a system call causes a full page (4,096 bytes) of data
 >> to be copied from user space into the kernel.  What is the least
@@ -85,8 +146,16 @@ Andrew Shugarts <rue92@vt.edu>
 >> for a system call that only copies 2 bytes of data?  Is there room
 >> for improvement in these numbers, and how much?
 
+The greatest number of inspections would be the number of pages in the user
+space, and the smallest would be one page.
+
 >> B5: Briefly describe your implementation of the "wait" system call
 >> and how it interacts with process termination.
+
+The wait system call relies on a semaphore that it lowers. When a process
+terminates, it raises this semaphore. Therefore, if the process terminates
+before the semaphore is lowered, then it is not blocked and the wait system
+call terminates immediately. Otherwise, it waits for the process to terminate.
 
 >> B6: Any access to user program memory at a user-specified address
 >> can fail due to a bad pointer value.  Such accesses must cause the
@@ -102,12 +171,27 @@ Andrew Shugarts <rue92@vt.edu>
 >> paragraphs, describe the strategy or strategies you adopted for
 >> managing these issues.  Give an example.
 
+To avoid obscuring the primary function of code, all error checking is handled
+at the beginning of the system call handler. This is cleaner and allows system
+calls to be terminated earlier if they try to access invalid or illegal memory.
+
+When an error occurs, sys_exit is called which handles the cleanup. This
+deallocates all of the resources allocated by a thread to avoid these issues.
+
+For example, suppose a user memory program places an address on the stack
+before a system call that it does not have permission to access. The system
+call handler will terminate this process.
+
 ---- SYNCHRONIZATION ----
 
 >> B7: The "exec" system call returns -1 if loading the new executable
 >> fails, so it cannot return before the new executable has completed
 >> loading.  How does your code ensure this?  How is the load
 >> success/failure status passed back to the thread that calls "exec"?
+
+A semaphore is lowered directly after the initial call to process_exec, and the
+semaphore is raised in start_process. If the load is not successful, sys_exit
+(-1) is called, so the thread will exit with a -1 exit status.
 
 >> B8: Consider parent process P with child process C.  How do you
 >> ensure proper synchronization and avoid race conditions when P
@@ -116,16 +200,30 @@ Andrew Shugarts <rue92@vt.edu>
 >> terminates without waiting, before C exits?  After C exits?  Are
 >> there any special cases?
 
+Semaphores are used to avoid race conditions when P calls wait(C) before C
+exits. After C exits, the semaphore will already be raised, so the semaphore
+will not block when sema_down is called. sys_exit cleans up resources when a
+thread exits. If P terminates without waiting before or after C exits, then all
+of its resources are deallocated. If it exits before C exits, then it sets C's
+parent_wait semaphore to NULL.
+
 ---- RATIONALE ----
 
 >> B9: Why did you choose to implement access to user memory from the
 >> kernel in the way that you did?
 
+It was the easiest way and we wanted to ensure that we did not worry as much
+about time constraints.
+
 >> B10: What advantages or disadvantages can you see to your design
 >> for file descriptors?
 
+Each process can only have 128 open file descriptors at a time.
+
 >> B11: The default tid_t to pid_t mapping is the identity mapping.
 >> If you changed it, what advantages are there to your approach?
+
+We did not change it.
 
                SURVEY QUESTIONS
                ================
