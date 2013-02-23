@@ -278,10 +278,10 @@ thread_create (const char *name, int priority,
   struct exit_status *stat = malloc (sizeof(struct exit_status));
   sema_init(&stat->parent_wait, 0);
   stat->tid = tid;
-  stat->status = 0;
+  stat->status = 100;
   stat->child = t;
   lock_acquire (&(thread_current ()->child_lock));
-  list_push_front (&(thread_current()->children), &stat->elem);
+  list_push_back (&(thread_current()->children), &stat->elem);
   lock_release (&(thread_current ()->child_lock));
   t->parent = thread_current ();
   t->wait = &stat->parent_wait;
@@ -599,7 +599,6 @@ init_thread (struct thread *t, const char *name, int priority)
   t->waiting_for = NULL;
   list_init(&t->holding);
   list_init(&t->children);
-  //  sema_init(&t->parent_wait, 0);
   lock_init(&t->child_lock);
   sema_init(&t->exec_synch, 0);
   int i;

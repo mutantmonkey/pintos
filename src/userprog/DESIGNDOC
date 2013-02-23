@@ -54,13 +54,35 @@ No changes were necessary.
 >> you arrange for the elements of argv[] to be in the right order?
 >> How do you avoid overflowing the stack page?
 
+Argument parsing was implemented by copying the file_name character by
+character into a page file replacing consecutive spaces or tabs with a
+null character. If the number of characters written was one over the
+size of a page then the copy stops and the page file is
+null-terminated. When arguments are pushed onto the stack, the
+null-separated arguments are traversed to determine pointer locations
+for arguments and the argument count is incremented. Then the argument
+pointers are pushed onto the stack in reverse order by starting at the
+pointer for argc and moving backwards.
+
 ---- RATIONALE ----
 
 >> A3: Why does Pintos implement strtok_r() but not strtok()?
 
+If a thread is preempted while calling strtok() and another thread
+calls strtok() then this will corrupt the static save_ptr shared
+between them and lead to undetermined behavior when the other thread
+returns. Overall, it's a mess.
+
 >> A4: In Pintos, the kernel separates commands into a executable name
 >> and arguments.  In Unix-like systems, the shell does this
 >> separation.  Identify at least two advantages of the Unix approach.
+
+One advantage is that the shell can error-check before passing it on
+to the system call handler. As a consequence, the shell can prevent
+malformed strings, verify the existance of the executable and similar
+problems. A second advantage is that this approach allows the shell to
+act as an interpreter for files and thus allows shell scripting and
+the like.
 
                  SYSTEM CALLS
                  ============

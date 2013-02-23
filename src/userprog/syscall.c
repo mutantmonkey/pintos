@@ -122,7 +122,6 @@ sys_exec (const char *cmd_line)
   if (!valid_ptr((void *)cmd_line))
     sys_exit (-1);
   pid_t result = process_execute (cmd_line);
-  sema_down (&thread_current ()->exec_synch);
   return result;
 }
 

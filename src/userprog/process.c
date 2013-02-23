@@ -71,6 +71,7 @@ process_execute (const char *file_name)
   tid = thread_create (fn_copy, PRI_DEFAULT, start_process, fn_copy);
   if (tid == TID_ERROR)
     palloc_free_page (fn_copy); 
+  sema_down (&thread_current ()->exec_synch);
   return tid;
 }
 
@@ -112,7 +113,7 @@ start_process (void *file_name_)
   *(int *)(if_.esp) = 0;
 
   // Push the pointers to the args onto the stack backwards
-  for (i = argc - 1; i >= 0; i--)
+  for (i = argc - 1; i >= 0 && PHYS_BASE - if_.esp <= PGSIZE - 12 ; i--)
     {
       if_.esp -= 4;
       *(void **)(if_.esp) = ptrs[i];
@@ -132,11 +133,11 @@ start_process (void *file_name_)
 
   /* If load failed, quit. */
   palloc_free_page (file_name);
-  sema_up(&thread_current ()->parent->exec_synch);
   if (!success) 
     {
       sys_exit (-1);
     }
+  sema_up(&thread_current ()->parent->exec_synch);
 
   /* Start the user process by simulating a return from an
      interrupt, implemented by intr_exit (in
@@ -196,6 +197,10 @@ process_exit (void)
     if (cur->fd_table[i] != NULL)
       file_close (cur->fd_table[i]);
 
+  file_close (cur->me);
+  if (cur->wait != NULL)
+    sema_up (cur->wait);
+
   struct list_elem *e;
   lock_acquire(&cur->child_lock);
   for (e = list_begin(&cur->children); e != list_end(&cur->children);
@@ -207,11 +212,8 @@ process_exit (void)
       free(t);
     }
   lock_release(&cur->child_lock);
-  file_close (cur->me);
 
-  if (cur->wait != NULL)
-    sema_up (cur->wait);
-  sema_up (&thread_current ()->exec_synch);
+  //  sema_up (&thread_current ()->parent->exec_synch);
 
   /* Destroy the current process's page directory and switch back
      to the kernel-only page directory. */
