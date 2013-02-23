@@ -98,8 +98,10 @@ struct thread
 
     struct list children;               /* Child threads of this thread. */
     struct list_elem child_elem;        /* List element used in child threads. */
-    struct semaphore parent_wait;       /* Semaphore used for process_wait. */
-    int exit_status;
+    struct thread *parent;
+    struct semaphore *parent_wait;       /* Semaphore used for process_wait. */
+    struct semaphore exec_synch;        /* Semaphore used for process_exec. */
+    int *exit_status;
 
     int nice;                           /* Niceness.*/
     fp recent_cpu;                      /* Thread's recent CPU. */
@@ -118,6 +120,14 @@ struct thread
     /* Owned by thread.c. */
     unsigned magic;                     /* Detects stack overflow. */
   };
+
+struct exit_status {
+  int tid;
+  struct list_elem elem;
+  int status;
+  struct semaphore parent_wait;
+  struct thread *child;
+};
 
 /* If false (default), use round-robin scheduler.
    If true, use multi-level feedback queue scheduler.

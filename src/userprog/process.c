@@ -1,4 +1,5 @@
 #include "userprog/process.h"
+#include "userprog/syscall.h"
 #include <debug.h>
 #include <inttypes.h>
 #include <round.h>
@@ -15,6 +16,7 @@
 #include "threads/init.h"
 #include "threads/interrupt.h"
 #include "threads/palloc.h"
+#include "threads/malloc.h"
 #include "threads/thread.h"
 #include "threads/vaddr.h"
 
@@ -38,26 +40,24 @@ process_execute (const char *file_name)
   if (fn_copy == NULL)
     return TID_ERROR;
 
-  strlcpy (fn_copy, file_name, PGSIZE);
   arg = file_name;
   fn = fn_copy;
   while (*arg != '\0')
     {
-      while (*arg != ' ' && *arg != '\t')
-	{
-	  *fn = *arg;
-	  fn++;
-	  arg++;
-	}
+      while (*arg != ' ' && *arg != '\t'
+	     && *arg != '\0')
+	*fn++ = *arg++;
+
       *fn = '\0';
       fn++;
+
       while (*arg == ' ' || *arg == '\t')
 	arg++;
     }
-  *fn = '\0';
+  *(int *)fn = '\0';
  
   /* Create a new thread to execute FILE_NAME. */
-  tid = thread_create (file_name, PRI_DEFAULT, start_process, fn_copy);
+  tid = thread_create (fn_copy, PRI_DEFAULT, start_process, fn_copy);
   if (tid == TID_ERROR)
     palloc_free_page (fn_copy); 
   return tid;
@@ -121,8 +121,11 @@ start_process (void *file_name_)
 
   /* If load failed, quit. */
   palloc_free_page (file_name);
+  sema_up(&thread_current ()->exec_synch);
   if (!success) 
-    thread_exit ();
+    {
+      sys_exit (-1);
+    }
 
   /* Start the user process by simulating a return from an
      interrupt, implemented by intr_exit (in
@@ -147,17 +150,18 @@ int
 process_wait (tid_t child_tid) 
 {
   struct thread *cur = thread_current (); 
-  struct thread *t;
+  struct exit_status *t;
   struct list_elem *e;
 
   for (e = list_begin(&cur->children); e != list_end(&cur->children);
       e = list_next(e))
   {
-    t = list_entry(e, struct thread, child_elem);
+    t = list_entry(e, struct exit_status, elem);
     if (t != NULL && t->tid == child_tid)
     {
-      //sema_down (&t->parent_wait);
-      return t->exit_status;
+      sema_down (&t->parent_wait);
+      list_remove(e);
+      return t->status;
     }
   }
 
@@ -169,14 +173,26 @@ void
 process_exit (void)
 {
   struct thread *cur = thread_current ();
+  struct exit_status *t;
   uint32_t *pd;
   int i;
   for (i = 0; i < 128; i++)
     if (cur->fd_table[i] != NULL)
       file_close (cur->fd_table[i]);
 
-  //sema_up (&cur->parent_wait);
-  list_remove (&cur->child_elem);
+  if (cur->parent_wait != NULL)
+    sema_up (cur->parent_wait);
+  //  list_remove (&cur->child_elem);
+
+  struct list_elem *e;
+  for (e = list_begin(&cur->children); e != list_end(&cur->children);
+       e = list_next(e))
+    {
+      t = list_entry(e, struct exit_status, elem);
+      list_remove(e);
+      t->child->parent_wait = NULL;
+      free(t);
+    }
 
   /* Destroy the current process's page directory and switch back
      to the kernel-only page directory. */

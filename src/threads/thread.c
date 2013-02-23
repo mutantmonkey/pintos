@@ -1,4 +1,5 @@
 #include "threads/thread.h"
+#include "threads/malloc.h"
 #include <debug.h>
 #include <stddef.h>
 #include <random.h>
@@ -272,7 +273,15 @@ thread_create (const char *name, int priority,
   sf->eip = switch_entry;
   sf->ebp = 0;
 
-  list_push_back (&(thread_current()->children), &t->child_elem);
+  struct exit_status *stat = malloc (sizeof(struct exit_status));
+  sema_init(&stat->parent_wait, 0);
+  stat->tid = t->tid;
+  stat->status = -1;
+  stat->child = t;
+  list_push_back (&(thread_current()->children), &stat->elem);
+  t->parent = thread_current ();
+  t->parent_wait = &stat->parent_wait;
+  t->exit_status = &stat->status;
 
   /* Add to run queue. */
   thread_unblock (t);
@@ -580,9 +589,12 @@ init_thread (struct thread *t, const char *name, int priority)
   t->priority = t->effective = priority;
   t->waiting_for = NULL;
   list_init(&t->holding);
-  //hash_init(&t->fd_table, fd_hash_func, fd_hash_less_func, NULL);
   list_init(&t->children);
-  sema_init(&t->parent_wait, 0);
+  //  sema_init(&t->parent_wait, 0);
+  sema_init(&t->exec_synch, 0);
+  int i;
+  for (i = 0; i < 128; i++)
+    t->fd_table[i] = NULL;
   t->nice = 0;
   t->recent_cpu = 0;
 

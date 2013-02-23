@@ -197,7 +197,7 @@ timer_interrupt (struct intr_frame *args UNUSED)
   {
     struct thread *t = list_entry (e, struct thread, alarm_elem);
 
-    if (t->unblock_ticks <= timer_ticks ())
+    if ((int64_t)t->unblock_ticks <= timer_ticks ())
     {
       list_remove (&t->alarm_elem);
       thread_unblock (t);
