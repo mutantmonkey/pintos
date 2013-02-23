@@ -98,9 +98,10 @@ struct thread
     struct file *me;                    /* The file this thread is running */
 
     struct list children;               /* Child threads of this thread. */
+    struct lock child_lock;
     struct list_elem child_elem;        /* List element used in child threads. */
     struct thread *parent;
-    struct semaphore *parent_wait;       /* Semaphore used for process_wait. */
+    struct semaphore *wait;       /* Semaphore used for process_wait. */
     struct semaphore exec_synch;        /* Semaphore used for process_exec. */
     int *exit_status;
 

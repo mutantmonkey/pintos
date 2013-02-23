@@ -111,8 +111,6 @@ sys_exit (int status)
 {
   *thread_current ()->exit_status = status;
   printf("%s: exit(%d)\n", thread_current ()->name, status);
-  if (thread_current ()->parent_wait != NULL)
-    sema_up (thread_current ()->parent_wait);
   thread_exit ();
 
   return 0;

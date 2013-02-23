@@ -11,6 +11,7 @@
 #include "userprog/tss.h"
 #include "filesys/directory.h"
 #include "filesys/file.h"
+#include "filesys/inode.h"
 #include "filesys/filesys.h"
 #include "threads/flags.h"
 #include "threads/init.h"
@@ -60,7 +61,11 @@ process_execute (const char *file_name)
   /* Make sure FILE_NAME exists. */
   file = filesys_open (fn_copy);
   if (file == NULL)
-    return -1;
+    {
+      sema_up (&thread_current ()->exec_synch);
+      return -1;
+    }
+  file_close (file);
  
   /* Create a new thread to execute FILE_NAME. */
   tid = thread_create (fn_copy, PRI_DEFAULT, start_process, fn_copy);
@@ -127,7 +132,7 @@ start_process (void *file_name_)
 
   /* If load failed, quit. */
   palloc_free_page (file_name);
-  sema_up(&thread_current ()->exec_synch);
+  sema_up(&thread_current ()->parent->exec_synch);
   if (!success) 
     {
       sys_exit (-1);
@@ -159,19 +164,22 @@ process_wait (tid_t child_tid)
   struct exit_status *t;
   struct list_elem *e;
 
+  lock_acquire(&cur->child_lock);
   for (e = list_begin(&cur->children); e != list_end(&cur->children);
       e = list_next(e))
   {
     t = list_entry(e, struct exit_status, elem);
     if (t != NULL && t->tid == child_tid)
     {
-      sema_down (&t->parent_wait);
       int status = t->status;
       list_remove(e);
+      lock_release(&cur->child_lock);
+      sema_down (&t->parent_wait);
       free (t);
       return status;
     }
   }
+  lock_release(&cur->child_lock);
 
   return -1;
 }
@@ -188,19 +196,22 @@ process_exit (void)
     if (cur->fd_table[i] != NULL)
       file_close (cur->fd_table[i]);
 
-  //  if (cur->parent_wait != NULL)
-  //    sema_up (cur->parent_wait);
-  file_close (cur->me);
-
   struct list_elem *e;
+  lock_acquire(&cur->child_lock);
   for (e = list_begin(&cur->children); e != list_end(&cur->children);
        e = list_next(e))
     {
       t = list_entry(e, struct exit_status, elem);
       list_remove(e);
-      t->child->parent_wait = NULL;
+      t->child->wait = NULL;
       free(t);
     }
+  lock_release(&cur->child_lock);
+  file_close (cur->me);
+
+  if (cur->wait != NULL)
+    sema_up (cur->wait);
+  sema_up (&thread_current ()->exec_synch);
 
   /* Destroy the current process's page directory and switch back
      to the kernel-only page directory. */
