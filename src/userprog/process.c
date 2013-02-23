@@ -171,10 +171,10 @@ process_wait (tid_t child_tid)
     t = list_entry(e, struct exit_status, elem);
     if (t != NULL && t->tid == child_tid)
     {
+      sema_down (&t->parent_wait);
       int status = t->status;
       list_remove(e);
       lock_release(&cur->child_lock);
-      sema_down (&t->parent_wait);
       free (t);
       return status;
     }
