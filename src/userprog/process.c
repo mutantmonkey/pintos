@@ -166,8 +166,10 @@ process_wait (tid_t child_tid)
     if (t != NULL && t->tid == child_tid)
     {
       sema_down (&t->parent_wait);
+      int status = t->status;
       list_remove(e);
-      return t->status;
+      free (t);
+      return status;
     }
   }
 
@@ -186,9 +188,9 @@ process_exit (void)
     if (cur->fd_table[i] != NULL)
       file_close (cur->fd_table[i]);
 
-  if (cur->parent_wait != NULL)
-    sema_up (cur->parent_wait);
-  //  list_remove (&cur->child_elem);
+  //  if (cur->parent_wait != NULL)
+  //    sema_up (cur->parent_wait);
+  file_close (cur->me);
 
   struct list_elem *e;
   for (e = list_begin(&cur->children); e != list_end(&cur->children);

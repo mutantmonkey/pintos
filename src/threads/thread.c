@@ -1,5 +1,7 @@
 #include "threads/thread.h"
 #include "threads/malloc.h"
+#include "filesys/filesys.h"
+#include "filesys/file.h"
 #include <debug.h>
 #include <stddef.h>
 #include <random.h>
@@ -282,6 +284,11 @@ thread_create (const char *name, int priority,
   t->parent = thread_current ();
   t->parent_wait = &stat->parent_wait;
   t->exit_status = &stat->status;
+  if (strcmp(t->name, "idle") != 0) 
+    {
+      t->me = filesys_open(t->name);
+      file_deny_write(t->me);
+    }
 
   /* Add to run queue. */
   thread_unblock (t);

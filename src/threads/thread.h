@@ -95,6 +95,7 @@ struct thread
     struct lock *waiting_for;           /* Lock this thread is waiting for. */
     struct list_elem allelem;           /* List element for all threads list. */
     struct file *fd_table[128];         /* An array of file pointers where index is the file descriptor */
+    struct file *me;                    /* The file this thread is running */
 
     struct list children;               /* Child threads of this thread. */
     struct list_elem child_elem;        /* List element used in child threads. */
