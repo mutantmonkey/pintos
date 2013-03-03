@@ -620,7 +620,6 @@ init_thread (struct thread *t, const char *name, int priority)
       t->effective = cur->effective;
     }
   }
-
   t->magic = THREAD_MAGIC;
   old_level = intr_disable ();
   list_push_back (&all_list, &t->allelem);

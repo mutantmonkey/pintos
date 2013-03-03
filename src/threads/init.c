@@ -30,6 +30,7 @@
 #include "userprog/gdt.h"
 #include "userprog/syscall.h"
 #include "userprog/tss.h"
+#include "vm/frame.h"
 #else
 #include "tests/threads/tests.h"
 #endif
@@ -106,6 +107,7 @@ main (void)
 #ifdef USERPROG
   tss_init ();
   gdt_init ();
+  frame_table_init();
 #endif
 
   /* Initialize interrupt handlers. */

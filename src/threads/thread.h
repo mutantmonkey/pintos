@@ -6,6 +6,7 @@
 #include <stdint.h>
 #include "synch.h"
 #include "fixed-point.h"
+#include <hash.h>
 
 /* States in a thread's life cycle. */
 enum thread_status
@@ -119,6 +120,8 @@ struct thread
     uint32_t *pagedir;                  /* Page directory. */
 #endif
 
+    struct hash sup_page_table;
+    struct lock hash_lock;
     /* Owned by thread.c. */
     unsigned magic;                     /* Detects stack overflow. */
   };

@@ -5,6 +5,8 @@
 #include "userprog/gdt.h"
 #include "threads/interrupt.h"
 #include "threads/thread.h"
+#include "vm/page.h"
+#include "userprog/pagedir.h"
 
 /* Number of page faults processed. */
 static long long page_fault_cnt;
@@ -149,6 +151,21 @@ page_fault (struct intr_frame *f)
   write = (f->error_code & PF_W) != 0;
   user = (f->error_code & PF_U) != 0;
 
+  if(!not_present || fault_addr == NULL || !is_user_vaddr(fault_addr))
+    sys_exit(-1);
+
+  if(page_fault_cnt > 100)
+    sys_exit(-100);
+
+
+  struct sup_page_table_entry* entry = get_sup_page_entry(&thread_current()->sup_page_table, pg_round_down(fault_addr));
+  if(entry != NULL)
+  {
+    vm_allocate(entry);
+    return;
+  }
+  else
+  {
   // When virtual memory gets implemented, we'll only care that
   // the page wasn't present at the time. Otherwise, we'll
   // just assume the user was malicious.
@@ -157,14 +174,12 @@ page_fault (struct intr_frame *f)
   sys_exit(-1);
   return;
 
-  /* To implement virtual memory, delete the rest of the function
-     body, and replace it with code that brings in the page to
-     which fault_addr refers. */
-  printf ("Page fault at %p: %s error %s page in %s context.\n",
+    printf ("Page fault at %p: %s error %s page in %s context.\n",
           fault_addr,
           not_present ? "not present" : "rights violation",
           write ? "writing" : "reading",
           user ? "user" : "kernel");
-  kill (f);
+    kill (f);
+  }
 }
 
