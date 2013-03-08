@@ -154,15 +154,21 @@ page_fault (struct intr_frame *f)
   if(!not_present || fault_addr == NULL || !is_user_vaddr(fault_addr))
     sys_exit(-1);
 
-  if(page_fault_cnt > 100)
-    sys_exit(-100);
-
+  //if(page_fault_cnt > 100)
+    //sys_exit(-100);
 
   struct sup_page_table_entry* entry = get_sup_page_entry(&thread_current()->sup_page_table, pg_round_down(fault_addr));
   if(entry != NULL)
   {
     vm_allocate(entry);
     return;
+  }
+  else if( fault_addr - f->esp >= -32 && fault_addr - f->esp <= 32)
+  {
+    //printf("%p | %p \n", fault_addr, f->esp);
+    //printf("%d \n", fault_addr - f->esp);
+    //sys_exit(-100);
+    grow_stack(pg_round_down(fault_addr));
   }
   else
   {

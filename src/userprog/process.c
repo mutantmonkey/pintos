@@ -219,7 +219,7 @@ process_exit (void)
   lock_release(&cur->child_lock);
 
   //  sema_up (&thread_current ()->parent->exec_synch);
-
+  free_sup_page_table(&thread_current()->sup_page_table);
   /* Destroy the current process's page directory and switch back
      to the kernel-only page directory. */
   pd = cur->pagedir;
