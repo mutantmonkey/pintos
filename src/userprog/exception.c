@@ -163,11 +163,15 @@ page_fault (struct intr_frame *f)
     vm_allocate(entry);
     return;
   }
-  else if( fault_addr - f->esp >= -32 && fault_addr - f->esp <= 32)
+  //Accesses up to 32 below the stack pointer and above the stack pointer result
+  //in stack growth.
+  else if( fault_addr - f->esp >= -32 && fault_addr - f->esp <= 65535)
   {
-    //printf("%p | %p \n", fault_addr, f->esp);
-    //printf("%d \n", fault_addr - f->esp);
-    //sys_exit(-100);
+    grow_stack(pg_round_down(fault_addr));
+  }
+  //Allow programs calling within sys calls to grow the stack.
+  else if(f->esp > PHYS_BASE)
+  {
     grow_stack(pg_round_down(fault_addr));
   }
   else
