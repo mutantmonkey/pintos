@@ -30,7 +30,8 @@
 #include "userprog/gdt.h"
 #include "userprog/syscall.h"
 #include "userprog/tss.h"
-#include "vm/frame.h"
+//#include "vm/frame.h"
+#include "vm/vm.h"
 #else
 #include "tests/threads/tests.h"
 #endif
@@ -107,7 +108,6 @@ main (void)
 #ifdef USERPROG
   tss_init ();
   gdt_init ();
-  frame_table_init();
 #endif
 
   /* Initialize interrupt handlers. */
@@ -135,6 +135,7 @@ main (void)
   filesys_init (format_filesys);
 #endif
 
+  frame_table_init();
   printf ("Boot complete.\n");
   
   /* Run actions specified on kernel command line. */

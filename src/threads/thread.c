@@ -109,7 +109,6 @@ thread_init (void)
 
   lock_init (&tid_lock);
   list_init (&all_list);
-
   int i;
   for (i = PRI_MAX; i >= PRI_MIN; i--) {
     list_init(&(priority_lists[i]));

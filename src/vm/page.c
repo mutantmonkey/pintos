@@ -1,4 +1,5 @@
-#include "vm/page.h"
+//#include "vm/page.h"
+#include "vm/vm.h"
 #include <hash.h>
 #include "threads/vaddr.h"
 #include "threads/malloc.h"
@@ -37,7 +38,8 @@ bool create_sup_page_entry(struct file* file, off_t offset, uint8_t* page, uint3
   entry->readbytes = read;
   entry->zerobytes = zero;
   entry->writable = writable;  
-
+  entry->frame = NULL;
+  entry->swapped = false;
   if(insert_entry_to_table(&thread_current()->sup_page_table, entry))
     return true;
   else
@@ -56,14 +58,14 @@ void free_sup_page_table(struct hash* table)
 void free_sup_page_entry(struct hash_elem *e, void* aux UNUSED)
 {
   struct sup_page_table_entry* entry = hash_entry(e, struct sup_page_table_entry, elem);
-
+  if(entry->frame != NULL && entry->swapped != true)
+  {
+    pagedir_clear_page(thread_current()->pagedir, entry->addr);
+    free_frame(entry->frame->frame_page);
+  }
+    //free_frame(entry->frame->frame_page);
   free(entry);
 }
-
-//bool remove_sup_page_entry(struct hash* table, void* page)
-//{
-//  struct sup_page_table_entry* entry = get_sup_page_entry(table, page);
-//}
 
 //Get a supplemental page table entry from the page table using a pointer to the virtual memory address
 //as the hash table index.
@@ -89,40 +91,48 @@ struct sup_page_table_entry* get_sup_page_entry(struct hash* table, void* page)
 //function from process.c
 bool vm_allocate(struct sup_page_table_entry* entry)
 {
-  struct thread *cur = thread_current ();
+  if(entry->swapped == true)
+  {
+    return bring_from_swap(entry);
+  }
+  
   file_seek (entry->f, entry->offset);
   
-  uint8_t *kpage = allocate_frame(PAL_USER);
-  if (kpage == NULL)
+  struct frame_table_entry* frame = allocate_frame(PAL_USER, entry);
+  
+  uint8_t *page = frame->frame_page;
+  if (page == NULL)
   {
     return false;
   }
   
-  if (file_read (entry->f, kpage, entry->readbytes) != (int) entry->readbytes)
+  if (file_read (entry->f, page, entry->readbytes) != (int) entry->readbytes)
   {
-    free_frame(kpage);
+    PANIC("FAIL\n");
+    free_frame(page);
     return false; 
   }
-
-  memset (kpage + entry->readbytes, 0, entry->zerobytes);
-  if (!pagedir_set_page(cur->pagedir, entry->addr, kpage, entry->writable)) 
+  memset (page + entry->readbytes, 0, entry->zerobytes);
+  if (!pagedir_set_page(thread_current()->pagedir, entry->addr, page, entry->writable)) 
   {
-    free_frame(kpage);
+    PANIC("FAIL\n");
+    free_frame(page);
     return false; 
   }
-  entry->frame = (void *)kpage;
+  entry->frame = frame;
   return true;
 }
 
 void grow_stack(void* ptr)
 {
-  struct thread* cur = thread_current();
-  uint8_t *kpage = allocate_frame(PAL_USER | PAL_ZERO);
-  if (kpage != NULL)
+  uint8_t* page = palloc_get_page(PAL_USER | PAL_ZERO); 
+  //uint8_t *page = allocate_frame(PAL_USER | PAL_ZERO, NULL)->frame_page;
+  if (page != NULL)
   {
-    if(!pagedir_set_page(cur->pagedir, ptr, kpage, true))
+    if(!pagedir_set_page(thread_current()->pagedir, ptr, page, true))
     {
-      free_frame(kpage);
+      PANIC("FAIL\n");
+      free_frame(page);
     }
   }
 }

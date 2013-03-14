@@ -5,7 +5,8 @@
 #include "userprog/gdt.h"
 #include "threads/interrupt.h"
 #include "threads/thread.h"
-#include "vm/page.h"
+//#include "vm/page.h"
+#include "vm/vm.h"
 #include "userprog/pagedir.h"
 
 /* Number of page faults processed. */
@@ -150,11 +151,15 @@ page_fault (struct intr_frame *f)
   not_present = (f->error_code & PF_P) == 0;
   write = (f->error_code & PF_W) != 0;
   user = (f->error_code & PF_U) != 0;
-
+  
   if(!not_present || fault_addr == NULL || !is_user_vaddr(fault_addr))
+  {
+    //PANIC("ASDF\n");
+    //printf("%p %b %b \n", fault_addr, not_present, is_user_vaddr(fault_addr));
     sys_exit(-1);
-
-  //if(page_fault_cnt > 100)
+  }
+  //if(page_fault_cnt > 300)
+    //PANIC("QWER\n");
     //sys_exit(-100);
 
   struct sup_page_table_entry* entry = get_sup_page_entry(&thread_current()->sup_page_table, pg_round_down(fault_addr));
