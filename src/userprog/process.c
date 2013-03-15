@@ -219,7 +219,6 @@ process_exit (void)
 
   //  sema_up (&thread_current ()->parent->exec_synch);
   free_sup_page_table(&thread_current()->sup_page_table);
-  //PANIC("EXIT\n");
   /* Destroy the current process's page directory and switch back
      to the kernel-only page directory. */
   pd = cur->pagedir;

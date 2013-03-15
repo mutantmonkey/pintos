@@ -40,6 +40,7 @@ bool create_sup_page_entry(struct file* file, off_t offset, uint8_t* page, uint3
   entry->writable = writable;  
   entry->frame = NULL;
   entry->swapped = false;
+  entry->loaded = false;
   if(insert_entry_to_table(&thread_current()->sup_page_table, entry))
     return true;
   else
@@ -48,11 +49,11 @@ bool create_sup_page_entry(struct file* file, off_t offset, uint8_t* page, uint3
 
 void free_sup_page_table(struct hash* table)
 {
-  lock_acquire(&thread_current()->hash_lock);
+  //lock_acquire(&thread_current()->hash_lock);
 
   hash_destroy(table, free_sup_page_entry);
 
-  lock_release(&thread_current()->hash_lock);
+  //lock_release(&thread_current()->hash_lock);
 }
 
 void free_sup_page_entry(struct hash_elem *e, void* aux UNUSED)
@@ -60,10 +61,12 @@ void free_sup_page_entry(struct hash_elem *e, void* aux UNUSED)
   struct sup_page_table_entry* entry = hash_entry(e, struct sup_page_table_entry, elem);
   if(entry->frame != NULL && entry->swapped != true)
   {
+    lock_acquire(&frame_table_lock);
+    list_remove(&entry->frame->frame_table_elem);
     pagedir_clear_page(thread_current()->pagedir, entry->addr);
-    free_frame(entry->frame->frame_page);
+    lock_release(&frame_table_lock);
+    free_frame(entry->frame);
   }
-    //free_frame(entry->frame->frame_page);
   free(entry);
 }
 
@@ -93,6 +96,8 @@ bool vm_allocate(struct sup_page_table_entry* entry)
 {
   if(entry->swapped == true)
   {
+    if(!is_user_vaddr(entry->addr))
+      PANIC("ASDF\n");
     return bring_from_swap(entry);
   }
   
@@ -100,6 +105,7 @@ bool vm_allocate(struct sup_page_table_entry* entry)
   
   struct frame_table_entry* frame = allocate_frame(PAL_USER, entry);
   
+  entry->frame = frame;
   uint8_t *page = frame->frame_page;
   if (page == NULL)
   {
@@ -109,30 +115,25 @@ bool vm_allocate(struct sup_page_table_entry* entry)
   if (file_read (entry->f, page, entry->readbytes) != (int) entry->readbytes)
   {
     PANIC("FAIL\n");
-    free_frame(page);
     return false; 
   }
   memset (page + entry->readbytes, 0, entry->zerobytes);
   if (!pagedir_set_page(thread_current()->pagedir, entry->addr, page, entry->writable)) 
   {
     PANIC("FAIL\n");
-    free_frame(page);
     return false; 
   }
-  entry->frame = frame;
   return true;
 }
 
 void grow_stack(void* ptr)
 {
   uint8_t* page = palloc_get_page(PAL_USER | PAL_ZERO); 
-  //uint8_t *page = allocate_frame(PAL_USER | PAL_ZERO, NULL)->frame_page;
   if (page != NULL)
   {
     if(!pagedir_set_page(thread_current()->pagedir, ptr, page, true))
     {
       PANIC("FAIL\n");
-      free_frame(page);
     }
   }
 }

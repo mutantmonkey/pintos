@@ -29,12 +29,14 @@ size_t insert_into_swap(void* frame_page)
 {
   lock_acquire(&swap_lock);
   size_t swap_pos = bitmap_scan(swap_space, 0, 1, false);
+  bitmap_set(swap_space, swap_pos, true);
+  lock_release(&swap_lock); 
+  
+
   size_t progress_pos = 0;
   for(; progress_pos < PGSIZE/BLOCK_SECTOR_SIZE; progress_pos++)
     block_write (swap_drive, swap_pos * (PGSIZE/BLOCK_SECTOR_SIZE) + progress_pos, frame_page + progress_pos*BLOCK_SECTOR_SIZE);
 
-  bitmap_set(swap_space, swap_pos, true);
-  lock_release(&swap_lock); 
   return swap_pos;
 }
 
@@ -47,11 +49,12 @@ void clear_swap_entry(size_t swap_pos)
 
 void retrieve_from_swap(size_t swap_pos, void* frame_page)
 {
-  lock_acquire(&swap_lock);
+
   size_t progress_pos = 0;
   for(; progress_pos < PGSIZE/BLOCK_SECTOR_SIZE; progress_pos++)
     block_read (swap_drive, swap_pos * (PGSIZE/BLOCK_SECTOR_SIZE) + progress_pos, frame_page + progress_pos*BLOCK_SECTOR_SIZE);
 
+  lock_acquire(&swap_lock);
   bitmap_set(swap_space, swap_pos, false); 
   lock_release(&swap_lock); 
 }

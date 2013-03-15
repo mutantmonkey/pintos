@@ -40,6 +40,7 @@ struct sup_page_table_entry
   bool writable;
   size_t swap_table_index;
   bool swapped;
+  bool loaded;
 };
 
 void free_sup_page_table(struct hash* table);
@@ -54,7 +55,7 @@ bool sup_table_less(const struct hash_elem*, const struct hash_elem*, void* aux 
 void frame_table_init(void);
 void remove_frame_entry(void *frame);
 struct frame_table_entry *allocate_frame(enum palloc_flags, struct sup_page_table_entry* entry);
-void free_frame(void *);
+void free_frame(struct frame_table_entry *);
 bool bring_from_swap(struct sup_page_table_entry* entry);
 //void bring_frame_from_swap(struct frame_table_entry* entry, enum palloc_flags flags);
 
