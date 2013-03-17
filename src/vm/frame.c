@@ -36,7 +36,12 @@ allocate_frame(enum palloc_flags flags, struct sup_page_table_entry* entry)
   {
     //PANIC("SWAP\n");
     //Synch problem here. Try a while loop
-    evict_frame(clock_evict()); 
+    struct frame_table_entry* evictee = clock_evict();
+    if(evictee == NULL)
+      PANIC("EVICTEE NULL\n");
+    
+    evict_frame(evictee);
+
     void *frame = palloc_get_page(flags);
     if(frame == NULL)
       PANIC("Frame NULL \n");
@@ -75,46 +80,6 @@ struct frame_table_entry* create_frame_entry(void* frame, struct sup_page_table_
   lock_release(&frame_table_lock);
   return entry;
 }
-
-//Removes a frame entry from the frame table list and frees it
-/**void remove_frame_entry(void *frame)
-{
-  struct frame_table_entry* entry;
-  struct list_elem* e;
-  lock_acquire(&frame_table_lock);
-  for (e = list_begin(&frame_table); e != list_end(&frame_table); e = list_next(e))
-  {
-    entry = list_entry(e, struct frame_table_entry, frame_table_elem);
-    if(entry->frame_page == frame)
-    {
-      list_remove(e);
-      free(entry);
-      break;
-    }
-  }
-  lock_release(&frame_table_lock);
-}**/
-
-/**struct frame_table_entry* get_frame_entry(void *frame)
-{
-  struct frame_table_entry* entry;
-  struct frame_table_entry* res = NULL;
-  struct list_elem* e;
-  lock_acquire(&frame_table_lock);
-  for (e = list_begin(&frame_table); e != list_end(&frame_table); e = list_next(e))
-  {
-    entry = list_entry(e, struct frame_table_entry, frame_table_elem);
-    if(entry->frame_page == frame)
-    {
-      res = entry;
-      break;
-    }
-  }
-  lock_release(&frame_table_lock);
-  return res;
-}**/
-
-
 struct frame_table_entry* clock_evict()
 {
   struct frame_table_entry* evictee;
@@ -130,8 +95,9 @@ struct frame_table_entry* clock_evict()
     bool accessed = pagedir_is_accessed(frame->thread->pagedir, frame->page->addr);
     if(!accessed)
     {
-      evictee = list_entry(list_pop_front(&frame_table), struct frame_table_entry, frame_table_elem);
-      pagedir_clear_page(evictee->thread->pagedir, evictee->page->addr);
+      pagedir_clear_page(frame->thread->pagedir, frame->page->addr);
+      evictee = frame;//list_entry(e, struct frame_table_entry, frame_table_elem);
+      list_remove(e);
       lock_release(&frame_table_lock);
       return evictee;
     }

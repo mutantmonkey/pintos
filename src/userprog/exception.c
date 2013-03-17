@@ -177,7 +177,7 @@ page_fault (struct intr_frame *f)
     grow_stack(pg_round_down(fault_addr));
   }
   //Allow programs calling within sys calls to grow the stack.
-  else if(f->esp > PHYS_BASE && f->esp - fault_addr < 1000000)
+  else if(f->esp > PHYS_BASE && f->esp - fault_addr < 1000000 && f->esp - fault_addr > 0)
   {
     grow_stack(pg_round_down(fault_addr));
   }

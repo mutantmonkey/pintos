@@ -203,16 +203,15 @@ mmap(int fd, void* addr, struct intr_frame *f UNUSED)
   //Disallow null addresses
   if(addr == NULL) 
     return -1;
- 
+
+  //Don't allow mmaps to map over existing data/code 
   if(get_sup_page_entry(&thread_current()->sup_page_table, pg_round_down(addr)) != NULL)
   {
     return -1;
   }
- 
-  //if(addr <= (void*)(0x8048000))
-    //return -1;
-  //if(addr >= (void*)(PHYS_BASE - 4096))
-    //return -1; 
+
+  if(addr >= (void*) (PHYS_BASE - 4096))
+    return -1;
   
   //All addresses should be page aligned
   if(pg_ofs(addr) != 0)
@@ -234,7 +233,7 @@ munmap(int mapping)
 {
   struct thread* thread = thread_current();
   lock_acquire(&thread->mmap_lock);
-  lock_acquire(&sys_file_io);
+  //lock_acquire(&sys_file_io);
   struct mmap_table_entry* entry;
   struct list_elem* e;
   for (e = list_begin(&thread->mmap_list); e != list_end(&thread->mmap_list); e = list_next(e))
@@ -244,11 +243,12 @@ munmap(int mapping)
     {
       mmap_write_back(entry);
       hash_delete(&thread->mmap_table, &entry->elem);
+      palloc_free_page(entry->page);
     }
   }
 
   lock_release(&thread->mmap_lock); 
-  lock_release(&sys_file_io);
+  //lock_release(&sys_file_io);
 }
 
 

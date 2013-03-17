@@ -135,13 +135,12 @@ bool mmap_allocate(struct mmap_table_entry* entry)
   file_seek (entry->f, entry->offset);
   
   void* page = palloc_get_page(PAL_USER);
-  entry->page = page; 
   if (page == NULL)
   {
-    PANIC("ALLOCATE FAIL\n");
-    return false;
+    PANIC("ASDF\n");
   }
   
+  entry->page = page; 
   if (file_read (entry->f, page, entry->readbytes) != (int) entry->readbytes)
   {
     PANIC("FAIL\n");
