@@ -43,6 +43,20 @@ struct sup_page_table_entry
   bool loaded;
 };
 
+struct mmap_table_entry
+{
+  off_t offset;
+  uint32_t readbytes;
+  uint32_t zerobytes;
+  struct hash_elem elem;
+  struct list_elem listelem;
+  bool writable;
+  uint8_t* addr;
+  struct file* f;
+  int mapid_t;
+  void* page;
+};
+
 void free_sup_page_table(struct hash* table);
 bool vm_allocate(struct sup_page_table_entry*);
 struct sup_page_table_entry* get_sup_page_entry(struct hash*, void*);
@@ -64,3 +78,12 @@ void swap_init(void);
 size_t insert_into_swap(void* frame_page);
 void clear_swap_entry(size_t swap_pos);
 void retrieve_from_swap(size_t swap_pos, void* frame_page);
+
+
+bool create_mmap_entry(struct file*, off_t, uint8_t*, uint32_t, uint32_t, bool, int);
+struct mmap_table_entry* get_mmap_entry(struct hash*, void*);
+void mmap_exit(void);
+bool mmap_write_back(struct mmap_table_entry*);
+bool mmap_allocate(struct mmap_table_entry*);
+unsigned mmap_table_hash (const struct hash_elem*, void* aux UNUSED);
+bool mmap_table_less (const struct hash_elem*, const struct hash_elem*, void* aux UNUSED);

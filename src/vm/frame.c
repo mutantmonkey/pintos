@@ -121,30 +121,22 @@ struct frame_table_entry* clock_evict()
   //int access_count = 0; 
   //int dirty_count = 0;
   //int elem_count = 0;
-  //struct list_elem* e;
   lock_acquire(&frame_table_lock);
   //evictee = list_entry(list_pop_front(&frame_table), struct frame_table_entry, frame_table_elem);
-  /**for (e = list_begin(&frame_table); e != list_end(&frame_table); e = list_next(e))
+  struct list_elem* e;
+  for (e = list_begin(&frame_table); e != list_end(&frame_table); e = list_next(e))
   {
     struct frame_table_entry* frame = list_entry(e, struct frame_table_entry, frame_table_elem);
-    if(!is_user_vaddr(frame->page->addr))
-      PANIC("ASDF\n");
     bool accessed = pagedir_is_accessed(frame->thread->pagedir, frame->page->addr);
-    bool dirty = pagedir_is_dirty(frame->thread->pagedir, frame->page->addr);
-    if(accessed)
+    if(!accessed)
     {
-      access_count++;
+      evictee = list_entry(list_pop_front(&frame_table), struct frame_table_entry, frame_table_elem);
+      pagedir_clear_page(evictee->thread->pagedir, evictee->page->addr);
+      lock_release(&frame_table_lock);
+      return evictee;
     }
-    if(dirty)
-    {
-      dirty_count++;
-    }
-    elem_count++;
   }
-  **/
-  //PANIC("Accessed: %d Dirty: %d out of %d \n", access_count, dirty_count, elem_count);
   evictee = list_entry(list_pop_front(&frame_table), struct frame_table_entry, frame_table_elem);
-  
   pagedir_clear_page(evictee->thread->pagedir, evictee->page->addr);
   lock_release(&frame_table_lock);
   return evictee;

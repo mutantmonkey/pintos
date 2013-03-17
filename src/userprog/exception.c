@@ -159,23 +159,26 @@ page_fault (struct intr_frame *f)
   }
 
   struct sup_page_table_entry* entry = get_sup_page_entry(&thread_current()->sup_page_table, pg_round_down(fault_addr));
+  struct mmap_table_entry* mmapped_entry = get_mmap_entry(&thread_current()->mmap_table, pg_round_down(fault_addr));
   if(entry != NULL)
   {
-    //printf("allocate %p \n", fault_addr);
     vm_allocate(entry);
+    return;
+  }
+  else if(mmapped_entry != NULL)
+  {
+    mmap_allocate(mmapped_entry);
     return;
   }
   //Accesses up to 32 below the stack pointer and above the stack pointer result
   //in stack growth.
   else if( fault_addr - f->esp >= -32 && fault_addr - f->esp <= 65535)
   {
-    //printf("grow stack %p \n", fault_addr);
     grow_stack(pg_round_down(fault_addr));
   }
   //Allow programs calling within sys calls to grow the stack.
   else if(f->esp > PHYS_BASE && f->esp - fault_addr < 1000000)
   {
-    //printf("grow stack base %p \n", fault_addr);
     grow_stack(pg_round_down(fault_addr));
   }
   else

@@ -90,8 +90,12 @@ start_process (void *file_name_)
   char *ptrs[128];
   int argc = 0, i = 0;
  
+
+  list_init(&thread_current()->mmap_list);
   hash_init(&thread_current()->sup_page_table, sup_table_hash, sup_table_less, NULL);
   lock_init(&thread_current()->hash_lock); 
+  hash_init(&thread_current()->mmap_table, mmap_table_hash, mmap_table_less , NULL);
+  lock_init(&thread_current()->mmap_lock);
   /* Initialize interrupt frame and load executable. */
   memset (&if_, 0, sizeof if_);
   if_.gs = if_.fs = if_.es = if_.ds = if_.ss = SEL_UDSEG;
@@ -197,6 +201,7 @@ process_exit (void)
   struct exit_status *t;
   uint32_t *pd;
   int i;
+  mmap_exit();
   for (i = 0; i < 128; i++)
     if (cur->fd_table[i] != NULL)
       file_close (cur->fd_table[i]);
@@ -216,7 +221,6 @@ process_exit (void)
       free(t);
     }
   lock_release(&cur->child_lock);
-
   //  sema_up (&thread_current ()->parent->exec_synch);
   free_sup_page_table(&thread_current()->sup_page_table);
   /* Destroy the current process's page directory and switch back
@@ -516,32 +520,8 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
       size_t page_read_bytes = read_bytes < PGSIZE ? read_bytes : PGSIZE;
       size_t page_zero_bytes = PGSIZE - page_read_bytes;
 
-      //printf("%p \n", upage);
-      /* Get a page of memory. */
-      //uint8_t *kpage = palloc_get_page (PAL_USER);
-      //uint8_t *kpage = allocate_frame(PAL_USER);
       if(create_sup_page_entry(file, ofs, upage, page_read_bytes, page_zero_bytes, writable) == false)
         return false;
-      //if (kpage == NULL)
-        //return false;
-
-      /* Load this page. */
-      /**if (file_read (file, kpage, page_read_bytes) != (int) page_read_bytes)
-        {
-	  free_frame(kpage);
-          //palloc_free_page (kpage);
-          return false; 
-        }
-      memset (kpage + page_read_bytes, 0, page_zero_bytes);
-      **/
-      /* Add the page to the process's address space. */
-      /**if (!install_page (upage, kpage, writable)) 
-        {
-	  free_frame(kpage);
-          //palloc_free_page (kpage);
-          return false; 
-        }
-      **/
       /* Advance. */
       read_bytes -= page_read_bytes;
       zero_bytes -= page_zero_bytes;
@@ -550,6 +530,42 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
     }
   return true;
 }
+
+int
+insert_mmap_entry (struct file *file, int file_length, uint8_t *upage) 
+{
+  ASSERT (pg_ofs (upage) == 0);
+  struct thread *thread = thread_current();
+  int mapid_t = thread->latest_mapid_t;
+  thread->latest_mapid_t++;
+  int remaining_length = file_length; 
+  int offset = 0;
+   
+  while(remaining_length > 0)
+  {
+    size_t page_read_bytes;
+    size_t page_zero_bytes;
+    if(remaining_length > PGSIZE)
+    {
+      page_read_bytes = PGSIZE;
+      page_zero_bytes = 0;
+      remaining_length -= PGSIZE;
+    }
+    else
+    {
+      page_read_bytes = remaining_length;
+      page_zero_bytes = PGSIZE - page_read_bytes;
+      remaining_length = 0;
+    }
+    
+    if(create_mmap_entry(file, offset, upage, page_read_bytes, page_zero_bytes, true, mapid_t) == false)
+      return -1;
+    offset += page_read_bytes;
+    upage += PGSIZE;
+  }
+  return mapid_t;
+}
+
 
 /* Create a minimal stack by mapping a zeroed page at the top of
    user virtual memory. */

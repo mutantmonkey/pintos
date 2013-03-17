@@ -599,6 +599,7 @@ init_thread (struct thread *t, const char *name, int priority)
   list_init(&t->holding);
   list_init(&t->children);
   lock_init(&t->child_lock);
+  t->latest_mapid_t = 0;
   sema_init(&t->exec_synch, 0);
   int i;
   for (i = 0; i < 128; i++)
