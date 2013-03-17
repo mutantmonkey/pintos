@@ -34,20 +34,17 @@ allocate_frame(enum palloc_flags flags, struct sup_page_table_entry* entry)
     frame_entry = create_frame_entry(frame, entry);
   else
   {
-    //PANIC("SWAP\n");
-    //Synch problem here. Try a while loop
     struct frame_table_entry* evictee = clock_evict();
-    if(evictee == NULL)
-      PANIC("EVICTEE NULL\n");
-    
-    evict_frame(evictee);
+    if(pagedir_is_dirty(evictee->thread->pagedir, evictee->page))
+      evict_frame(evictee);
+    //else
+      //free_frame(evictee);
 
     void *frame = palloc_get_page(flags);
     if(frame == NULL)
       PANIC("Frame NULL \n");
     frame_entry = create_frame_entry(frame, entry);
     
-    //thread_exit();
   }
   return frame_entry;
 }
@@ -56,9 +53,6 @@ allocate_frame(enum palloc_flags flags, struct sup_page_table_entry* entry)
 void 
 free_frame(struct frame_table_entry* frame_entry)
 {
-  //Create a frame table entry lock in addition to the frame table lock to wait for the eviction
-  //pagedir_clear_page(frame_entry->thread->pagedir, frame_entry->page->addr);
-  //ASSERT
   palloc_free_page(frame_entry->frame_page); 
   free(frame_entry);
 }
@@ -83,11 +77,7 @@ struct frame_table_entry* create_frame_entry(void* frame, struct sup_page_table_
 struct frame_table_entry* clock_evict()
 {
   struct frame_table_entry* evictee;
-  //int access_count = 0; 
-  //int dirty_count = 0;
-  //int elem_count = 0;
   lock_acquire(&frame_table_lock);
-  //evictee = list_entry(list_pop_front(&frame_table), struct frame_table_entry, frame_table_elem);
   struct list_elem* e;
   for (e = list_begin(&frame_table); e != list_end(&frame_table); e = list_next(e))
   {
@@ -110,20 +100,15 @@ struct frame_table_entry* clock_evict()
 
 void evict_frame(struct frame_table_entry* entry)
 {
-  //lock_acquire(&evict);
   size_t swap_pos = insert_into_swap(entry->frame_page);
-  //insert_into_swap(entry->frame_page);
   entry->page->swap_table_index = swap_pos;
   entry->page->swapped = true;
-  //Synch issue! Remove frame during clock_evict
   free_frame(entry);
-  //lock_release(&evict);
 }
 
 
 bool bring_from_swap(struct sup_page_table_entry* entry)
 {
-  //PANIC("BRING FROM SWAP\n");
   struct frame_table_entry* frame_entry = clock_evict();
   evict_frame(frame_entry);
 
