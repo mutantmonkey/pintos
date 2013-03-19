@@ -15,9 +15,6 @@ void swap_init(void)
   lock_init(&swap_lock);
   swap_drive = block_get_role(BLOCK_SWAP);  
 
-  if(swap_drive == NULL)
-    PANIC("Swap drive not found\n"); 
-
   size_t size_in_pages = (block_size(swap_drive) * BLOCK_SECTOR_SIZE)/PGSIZE;
   swap_space = bitmap_create(size_in_pages);
 
