@@ -175,7 +175,7 @@ bool mmap_allocate(struct mmap_table_entry* entry)
   void* page = palloc_get_page(PAL_USER);
   if (page == NULL)
   {
-    PANIC("ASDF\n");
+    PANIC("MMAP ALLOCATE FAILED\n");
   }
   
   entry->page = page; 
