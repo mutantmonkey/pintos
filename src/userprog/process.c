@@ -531,42 +531,6 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
   return true;
 }
 
-int
-insert_mmap_entry (struct file *file, int file_length, uint8_t *upage) 
-{
-  ASSERT (pg_ofs (upage) == 0);
-  struct thread *thread = thread_current();
-  int mapid_t = thread->latest_mapid_t;
-  thread->latest_mapid_t++;
-  int remaining_length = file_length; 
-  int offset = 0;
-   
-  while(remaining_length > 0)
-  {
-    size_t page_read_bytes;
-    size_t page_zero_bytes;
-    if(remaining_length > PGSIZE)
-    {
-      page_read_bytes = PGSIZE;
-      page_zero_bytes = 0;
-      remaining_length -= PGSIZE;
-    }
-    else
-    {
-      page_read_bytes = remaining_length;
-      page_zero_bytes = PGSIZE - page_read_bytes;
-      remaining_length = 0;
-    }
-    
-    if(create_mmap_entry(file, offset, upage, page_read_bytes, page_zero_bytes, true, mapid_t) == false)
-      return -1;
-    offset += page_read_bytes;
-    upage += PGSIZE;
-  }
-  return mapid_t;
-}
-
-
 /* Create a minimal stack by mapping a zeroed page at the top of
    user virtual memory. */
 static bool

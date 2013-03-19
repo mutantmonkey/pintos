@@ -154,7 +154,6 @@ page_fault (struct intr_frame *f)
 
   if(!not_present || fault_addr == NULL || !is_user_vaddr(fault_addr))
   {
-    //PANIC("%p %d %d \n", fault_addr, not_present, is_user_vaddr(fault_addr));
     sys_exit(-1);
   }
 

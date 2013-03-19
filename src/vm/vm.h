@@ -1,22 +1,20 @@
 #include <hash.h>
-//#include "vm/frame.h" 
 #include "threads/vaddr.h"
 #include "filesys/file.h"
 #include "threads/synch.h"
 #include <list.h>
 #include "threads/palloc.h"
-//#include "lib/kernel/bitmap.h"
 #include <bitmap.h>
 
 struct list frame_table;
 struct lock frame_table_lock;
 
-enum page_type
+/**enum page_type
 {
   MMAPPED_FILE,
   FILE_TYPE,
   SWAP
-};
+};**/
 
 struct frame_table_entry
 {
@@ -33,7 +31,7 @@ struct sup_page_table_entry
   uint32_t readbytes;
   uint32_t zerobytes;
   struct hash_elem elem;
-  enum page_type type;
+  //enum page_type type;
   uint8_t* addr;
   struct file* f;
   struct frame_table_entry* frame;
@@ -71,7 +69,6 @@ void remove_frame_entry(void *frame);
 struct frame_table_entry *allocate_frame(enum palloc_flags, struct sup_page_table_entry* entry);
 void free_frame(struct frame_table_entry *);
 bool bring_from_swap(struct sup_page_table_entry* entry);
-//void bring_frame_from_swap(struct frame_table_entry* entry, enum palloc_flags flags);
 
 
 void swap_init(void);
@@ -80,6 +77,7 @@ void clear_swap_entry(size_t swap_pos);
 void retrieve_from_swap(size_t swap_pos, void* frame_page);
 
 
+int insert_mmap_entry (struct file *, int, uint8_t *); 
 bool create_mmap_entry(struct file*, off_t, uint8_t*, uint32_t, uint32_t, bool, int);
 struct mmap_table_entry* get_mmap_entry(struct hash*, void*);
 void mmap_exit(void);

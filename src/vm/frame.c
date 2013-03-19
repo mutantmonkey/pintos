@@ -37,8 +37,6 @@ allocate_frame(enum palloc_flags flags, struct sup_page_table_entry* entry)
     struct frame_table_entry* evictee = clock_evict();
     if(pagedir_is_dirty(evictee->thread->pagedir, evictee->page))
       evict_frame(evictee);
-    //else
-      //free_frame(evictee);
 
     void *frame = palloc_get_page(flags);
     if(frame == NULL)
@@ -74,6 +72,8 @@ struct frame_table_entry* create_frame_entry(void* frame, struct sup_page_table_
   lock_release(&frame_table_lock);
   return entry;
 }
+//Evict the first entry that has not been accessed. If all have been 
+//accessed, remove the first entry in the frame table.
 struct frame_table_entry* clock_evict()
 {
   struct frame_table_entry* evictee;
@@ -97,7 +97,9 @@ struct frame_table_entry* clock_evict()
   lock_release(&frame_table_lock);
   return evictee;
 }
-
+//Evict a frame by writting it to swap space and by 
+//making note of this transition in the corresponding
+//supplemental page table entry
 void evict_frame(struct frame_table_entry* entry)
 {
   size_t swap_pos = insert_into_swap(entry->frame_page);
@@ -106,7 +108,7 @@ void evict_frame(struct frame_table_entry* entry)
   free_frame(entry);
 }
 
-
+//Bring a frame back from swap space.
 bool bring_from_swap(struct sup_page_table_entry* entry)
 {
   struct frame_table_entry* frame_entry = clock_evict();

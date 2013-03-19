@@ -27,7 +27,7 @@ static int sys_write (int fd, const void *buffer, unsigned length);
 static void sys_seek (int fd, unsigned position);
 static unsigned sys_tell (int fd);
 static void sys_close (int fd);
-static int mmap(int fd, void* addr, struct intr_frame*);
+static int mmap(int fd, void* addr);
 static void munmap(int mapping);
 
 #define FIRST(f) (*(f + 1))
@@ -97,7 +97,7 @@ syscall_handler (struct intr_frame *f)
       sys_close (FIRST(p));
       break;
     case SYS_MMAP:
-      f->eax = mmap(FIRST(p), (void *) *(p + 2), f);
+      f->eax = mmap(FIRST(p), (void *) *(p + 2));
       break;
     case SYS_MUNMAP:
       munmap (FIRST(p));
@@ -194,7 +194,7 @@ get_file (int fd, bool remove)
 }
 
 static int
-mmap(int fd, void* addr, struct intr_frame *f UNUSED)
+mmap(int fd, void* addr)
 {
   //Don't allow the mmapped file descriptor to be equal to stdin or stdout
   if(!is_valid_fd(fd))
@@ -233,7 +233,6 @@ munmap(int mapping)
 {
   struct thread* thread = thread_current();
   lock_acquire(&thread->mmap_lock);
-  //lock_acquire(&sys_file_io);
   struct mmap_table_entry* entry;
   struct list_elem* e;
   for (e = list_begin(&thread->mmap_list); e != list_end(&thread->mmap_list); e = list_next(e))
@@ -248,7 +247,6 @@ munmap(int mapping)
   }
 
   lock_release(&thread->mmap_lock); 
-  //lock_release(&sys_file_io);
 }
 
 
