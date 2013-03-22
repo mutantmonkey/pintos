@@ -123,6 +123,10 @@ struct thread
 
     struct hash sup_page_table;
     struct lock hash_lock;
+    struct hash mmap_table;
+    struct lock mmap_lock;
+    int latest_mapid_t;
+    struct list mmap_list;
     /* Owned by thread.c. */
     unsigned magic;                     /* Detects stack overflow. */
   };

@@ -151,21 +151,22 @@ page_fault (struct intr_frame *f)
   not_present = (f->error_code & PF_P) == 0;
   write = (f->error_code & PF_W) != 0;
   user = (f->error_code & PF_U) != 0;
-  
+
   if(!not_present || fault_addr == NULL || !is_user_vaddr(fault_addr))
   {
-    //PANIC("ASDF\n");
-    //printf("%p %b %b \n", fault_addr, not_present, is_user_vaddr(fault_addr));
     sys_exit(-1);
   }
-  //if(page_fault_cnt > 300)
-    //PANIC("QWER\n");
-    //sys_exit(-100);
 
   struct sup_page_table_entry* entry = get_sup_page_entry(&thread_current()->sup_page_table, pg_round_down(fault_addr));
+  struct mmap_table_entry* mmapped_entry = get_mmap_entry(&thread_current()->mmap_table, pg_round_down(fault_addr));
   if(entry != NULL)
   {
     vm_allocate(entry);
+    return;
+  }
+  else if(mmapped_entry != NULL)
+  {
+    mmap_allocate(mmapped_entry);
     return;
   }
   //Accesses up to 32 below the stack pointer and above the stack pointer result
@@ -175,7 +176,7 @@ page_fault (struct intr_frame *f)
     grow_stack(pg_round_down(fault_addr));
   }
   //Allow programs calling within sys calls to grow the stack.
-  else if(f->esp > PHYS_BASE)
+  else if(f->esp > PHYS_BASE && f->esp - fault_addr < 1000000 && f->esp - fault_addr > 0)
   {
     grow_stack(pg_round_down(fault_addr));
   }
