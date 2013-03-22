@@ -275,6 +275,12 @@ thread_create (const char *name, int priority,
   sf->ebp = 0;
 
   struct exit_status *stat = malloc (sizeof(struct exit_status));
+  if (stat == NULL)
+    {
+      palloc_free_page(t);
+      return TID_ERROR;
+    }
+
   sema_init(&stat->parent_wait, 0);
   stat->tid = tid;
   stat->status = 100;

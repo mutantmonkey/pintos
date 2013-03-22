@@ -65,15 +65,15 @@ process_execute (const char *file_name)
   file = filesys_open (fn_copy);
   if (file == NULL)
     {
-      sema_up (&thread_current ()->exec_synch);
-      return -1;
+      palloc_free_page (fn_copy);
+      return TID_ERROR;
     }
-  //file_close (file);
+  file_close (file);
  
   /* Create a new thread to execute FILE_NAME. */
   tid = thread_create (fn_copy, PRI_DEFAULT, start_process, fn_copy);
   if (tid == TID_ERROR)
-    palloc_free_page (fn_copy); 
+    palloc_free_page (fn_copy);
   sema_down (&thread_current ()->exec_synch);
   return tid;
 }
@@ -86,9 +86,9 @@ start_process (void *file_name_)
 
   char *file_name = file_name_;
   struct intr_frame if_;
-  bool success;
   char *ptrs[128];
   int argc = 0, i = 0;
+  bool success = false;
  
   hash_init(&thread_current()->sup_page_table, sup_table_hash, sup_table_less, NULL);
   lock_init(&thread_current()->hash_lock); 
@@ -213,6 +213,7 @@ process_exit (void)
       t = list_entry(e, struct exit_status, elem);
       list_remove(e);
       t->child->wait = NULL;
+      t->child->exit_status = NULL;
       free(t);
     }
   lock_release(&cur->child_lock);
@@ -220,6 +221,7 @@ process_exit (void)
   //  sema_up (&thread_current ()->parent->exec_synch);
   free_sup_page_table(&thread_current()->sup_page_table);
   //PANIC("EXIT\n");
+
   /* Destroy the current process's page directory and switch back
      to the kernel-only page directory. */
   pd = cur->pagedir;

@@ -109,7 +109,8 @@ sys_halt (void)
 int
 sys_exit (int status)
 {
-  *thread_current ()->exit_status = status;
+  if (thread_current()->exit_status != NULL)
+    *thread_current ()->exit_status = status;
   printf("%s: exit(%d)\n", thread_current ()->name, status);
   thread_exit ();
 
