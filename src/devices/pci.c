@@ -287,6 +287,7 @@ pci_io_size (struct pci_io *pio)
 void
 pci_reg_write32 (struct pci_io *pio, int reg, uint32_t data)
 {
+  //printf("%p \n", pio->addr.ptr);
   ASSERT (pio != NULL);
   ASSERT ((unsigned) reg < pio->size);
 
@@ -495,17 +496,18 @@ pci_scan_bus (int bus)
   int max_bus;
 
   max_bus = 0;
-
   for (dev = 0; dev < PCI_MAX_DEV_PER_BUS; dev++)
     {
       struct pci_config_header pch;
       int func_cnt, func;
 
       pci_read_all_config (bus, dev, 0, &pch);
-
       if (pch.pci_vendor_id == PCI_VENDOR_INVALID)
 	continue;
-
+      
+      //printf("Vendor ID: %x Device ID: %x\n", pch.pci_vendor_id, pch.pci_device_id);
+      //if(pch.pci_vendor_id == E1000_VENDOR)
+          //PANIC("%d %d \n", pch.pci_vendor_id, E1000_VENDOR);
       func_cnt = 8;
       if (!(pch.pci_header & PCI_HEADER_MULTIFUNC))
 	{
@@ -724,6 +726,53 @@ pci_print_dev_info (struct pci_dev *pd)
 	  pci_lookup_device (pd->pch.pci_vendor_id, pd->pch.pci_device_id),
 	  pci_lookup_class (pd->pch.pci_major, pd->pch.pci_minor,
 			    pd->pch.pci_interface), pd->pch.pci_int_line);
+}
+
+void
+pci_enable(struct pci_dev *pd)
+{
+  pci_write_config32(pd, 0x4, PCI_CMD_IO | PCI_CMD_MEMORY | PCI_CMD_MASTER);
+  /**uint32_t bar_width;
+  uint32_t bar;
+  for(bar = PCI_MAPREG_START; bar < PCI_MAPREG_END; bar += bar_width)
+  {
+    uint32_t oldv = pci_read_config32(pd, bar);
+    bar_width = 4;
+    pci_write_config32(pd, bar, 0xffffffff);
+  
+    uint32_t rv = pci_read_config32(pd, bar);
+    if(rv == 0)
+    {
+      continue;
+    }
+
+    int regnum = PCI_MAPREG_NUM(bar);
+    uint32_t base, size;
+    if (PCI_MAPREG_TYPE(rv) == PCI_MAPREG_TYPE_MEM) 
+    {
+      if (PCI_MAPREG_MEM_TYPE(rv) == PCI_MAPREG_MEM_TYPE_64BIT)
+        bar_width = 8;
+
+      size = PCI_MAPREG_MEM_SIZE(rv);
+      base = PCI_MAPREG_MEM_ADDR(oldv);
+      printf("  mem region %d: %d bytes at 0x%x\n", regnum, size, base);
+    } 
+    else 
+    {
+      size = PCI_MAPREG_IO_SIZE(rv);
+      base = PCI_MAPREG_IO_ADDR(oldv);
+      printf("  io region %d: %d bytes at 0x%x\n", regnum, size, base);
+    }
+    pci_write_config32(pd, bar, oldv);
+    pd->pch.pci_base_reg[regnum] = base;
+    pd->base_reg_size[regnum] = size;
+    if( size && !base)
+    {
+      printf("PCI dev may be misconfigured\n");
+    }
+  }
+  printf("PCI enabled\n");
+  **/
 }
 
 void

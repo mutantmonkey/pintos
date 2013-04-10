@@ -17,6 +17,7 @@
 #include "devices/timer.h"
 #include "devices/vga.h"
 #include "devices/rtc.h"
+#include "devices/e1000.h"
 #include "threads/interrupt.h"
 #include "threads/io.h"
 #include "threads/loader.h"
@@ -124,7 +125,7 @@ main (void)
   serial_init_queue ();
   timer_calibrate ();
   usb_init ();
-
+  e1000_init();
 #ifdef FILESYS
   /* Initialize file system. */
   usb_storage_init ();

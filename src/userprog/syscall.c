@@ -10,7 +10,7 @@
 #include "filesys/filesys.h"
 #include <console.h>
 #include <devices/input.h>
-
+#include "devices/pci.h"
 struct lock sys_file_io;
 
 static void syscall_handler (struct intr_frame *);
@@ -94,10 +94,19 @@ syscall_handler (struct intr_frame *f)
     case SYS_CLOSE:
       sys_close (FIRST(p));
       break;
+    case PCI_PRINT:
+      pci_print();
+      break;
     default:
       sys_exit (-1);
       break;
   }
+}
+
+void
+pci_print(void)
+{
+  pci_print_stats();
 }
 
 static void
