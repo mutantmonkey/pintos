@@ -38,7 +38,7 @@ void
 filesys_done (void) 
 {
   free_map_close ();
-  buffer_shutdown ();
+  //  buffer_shutdown ();
 }
 
 /* Creates a file named NAME with the given INITIAL_SIZE.
