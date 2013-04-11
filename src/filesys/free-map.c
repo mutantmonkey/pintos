@@ -1,4 +1,5 @@
 #include "filesys/free-map.h"
+#include <stdio.h>
 #include <bitmap.h>
 #include <debug.h>
 #include "filesys/file.h"

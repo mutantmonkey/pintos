@@ -1,10 +1,11 @@
-#ifndef _CACHE_H
-#define _CACHE_H
+#ifndef FILESYS_CACHE_H
+#define FILESYS_CACHE_H
 
 #include "devices/block.h"
 #include <stdbool.h>
 
 #define NUM_BLOCK 64
+#define NUM_PAGES 8
 
 struct cache_block;
 
@@ -13,7 +14,7 @@ struct cache_block;
  * possibly evicting some other unused sector.
  * Either grants exclusive or shared access. 
  */
-struct cache_block *cache_get_block (disk_sector_t sector, bool exclusive);
+struct cache_block *cache_get_block (block_sector_t sector, bool exclusive);
 
 /* Release access to cache block. */
 void cache_put_block(struct cache_block *b);
@@ -36,7 +37,7 @@ void cache_mark_block_dirty (struct cache_block *b);
 /**
  * Initializes the buffer cache.
  */
-void buffer_initialize ();
+void buffer_initialize (void);
 
 /**
  * Prefetches a block to exploit spatial locality.
@@ -47,5 +48,7 @@ void buffer_initialize ();
  * Shuts down the buffer cache. Writes back dirty memory to disk and
  * frees all allocated physical memory.
  */
-// TODO: INSERT cache_shutdown
-#endif _CACHE_H
+void buffer_shutdown (void);
+
+void buffer_writeback (void *);
+#endif

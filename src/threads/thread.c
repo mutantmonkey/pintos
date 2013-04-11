@@ -1,5 +1,6 @@
 #include "threads/thread.h"
 #include "threads/malloc.h"
+#include "filesys/cache.h"
 #include "filesys/filesys.h"
 #include "filesys/file.h"
 #include <debug.h>
