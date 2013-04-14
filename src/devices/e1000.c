@@ -39,7 +39,6 @@ e1000_init(void)
   {
     rcv_desc_array[i].addr = vtop(&rcv_pkt_bufs[i].buf);
   }
-
   pci_reg_write32(io, E1000_TDBAL, vtop(tx_desc_array)); 
   pci_reg_write32(io, E1000_TDBAH, 0x0);
   
@@ -87,7 +86,7 @@ e1000_init(void)
   while( ! (pci_reg_read32(io, E1000_EERD) & E1000_EERD_DONE));
   pci_reg_write32(io, E1000_RAH, pci_reg_read32(io, E1000_EERD) >> 16);
  
-  pci_reg_write32(io, E1000_RAH, 0x1 << 31);
+  pci_reg_write32(io, E1000_RAH, pci_reg_read32(io, E1000_RAH) | (0x1 << 31));
 
   pci_reg_write32(io, E1000_RDBAL, vtop(rcv_desc_array));
   pci_reg_write32(io, E1000_RDBAH, 0x0);
@@ -107,7 +106,14 @@ e1000_init(void)
   tmp &= ~E1000_RCTL_SZ; // 2048 byte size
   tmp |= E1000_RCTL_SECRC;
   pci_reg_write32(io, E1000_RCTL, tmp);
-  
+ 
+  uint32_t low;
+  uint32_t high;
+  low = pci_reg_read32(io, E1000_RAL); 
+  high = pci_reg_read32(io, E1000_RAH);
+  //high = high & 0xffff;
+  printf("%08x \n", low); 
+  printf("%08x \n", high); 
   //return 0;
 }
 
