@@ -3,7 +3,7 @@
 #define E1000_DEVICE		0x100e
 
 
-volatile uint32_t *e1000; // MMIO address to access E1000 BAR
+//volatile uint32_t *e1000; // MMIO address to access E1000 BAR
 #define E1000_MMIOADDR KSTACKTOP /* MMIO Address for E1000 BAR 0 */
 #define E1000_TXDESC 64
 #define E1000_RCVDESC 64

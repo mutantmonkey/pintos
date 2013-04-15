@@ -11,6 +11,7 @@ struct tx_pkt tx_pkt_bufs[E1000_TXDESC];
 struct rcv_desc rcv_desc_array[E1000_RCVDESC] __attribute__ ((aligned (16)));
 struct rcv_pkt rcv_pkt_bufs[E1000_RCVDESC];
 
+struct pci_io *io;
 
 void
 e1000_init(void)
@@ -20,8 +21,8 @@ e1000_init(void)
   struct pci_dev *pci = pci_get_device(E1000_VENDOR, E1000_DEVICE, 0, 0);
   pci_enable(pci);
   
-  struct pci_io *io = pci_io_enum(pci, NULL);
-  
+  //struct pci_io *io = pci_io_enum(pci, NULL);
+  io = pci_io_enum(pci, NULL);
   printf("%08x \n", pci_reg_read32(io, E1000_STATUS)); 
   
   ASSERT(pci_reg_read32(io, E1000_STATUS) == 0x80080783);
@@ -107,14 +108,6 @@ e1000_init(void)
   tmp |= E1000_RCTL_SECRC;
   pci_reg_write32(io, E1000_RCTL, tmp);
  
-  uint32_t low;
-  uint32_t high;
-  low = pci_reg_read32(io, E1000_RAL); 
-  high = pci_reg_read32(io, E1000_RAH);
-  //high = high & 0xffff;
-  printf("%08x \n", low); 
-  printf("%08x \n", high); 
-  //return 0;
 }
 
 
@@ -126,7 +119,8 @@ e1000_transmit(char *data, int len)
     return -E_PKT_TOO_LONG;
   }
 
-  uint32_t tdt = e1000[E1000_TDT];
+  //uint32_t tdt = e1000[E1000_TDT];
+  uint32_t tdt = pci_reg_read32(io, E1000_TDT);
   if (tx_desc_array[tdt].status & E1000_TXD_STAT_DD) 
   {
     memmove(tx_pkt_bufs[tdt].buf, data, len);
@@ -137,7 +131,8 @@ e1000_transmit(char *data, int len)
     tx_desc_array[tdt].cmd |= E1000_TXD_CMD_RS;
     tx_desc_array[tdt].cmd |= E1000_TXD_CMD_EOP;
 
-    e1000[E1000_TDT] = (tdt + 1) % E1000_TXDESC;
+    //e1000[E1000_TDT] = (tdt + 1) % E1000_TXDESC;
+    pci_reg_write32(io, E1000_TDT, (tdt + 1) % E1000_TXDESC);
   }
   else 
   { // tx queue is full
@@ -152,8 +147,9 @@ int
 e1000_receive(char *data)
 {
   uint32_t rdt, len;
-  rdt = e1000[E1000_RDT];
+  //rdt = e1000[E1000_RDT];
 
+  rdt = pci_reg_read32(io, E1000_RDT);
   if (rcv_desc_array[rdt].status & E1000_RXD_STAT_DD) 
   {
     if (!(rcv_desc_array[rdt].status & E1000_RXD_STAT_EOP)) 
@@ -166,8 +162,8 @@ e1000_receive(char *data)
     //HEXDUMP("rx dump:", data, len);
     rcv_desc_array[rdt].status &= ~E1000_RXD_STAT_DD;
     rcv_desc_array[rdt].status &= ~E1000_RXD_STAT_EOP;
-    e1000[E1000_RDT] = (rdt + 1) % E1000_RCVDESC;
-
+    //e1000[E1000_RDT] = (rdt + 1) % E1000_RCVDESC;
+    pci_reg_write32(io, E1000_RDT, (rdt + 1) % E1000_RCVDESC);
     return len;
   }
   return -E_RCV_EMPTY;
