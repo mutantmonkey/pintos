@@ -42,6 +42,7 @@ devices_SRC += devices/usb_uhci.c	# UHCI device.
 devices_SRC += devices/usb_ehci.c	# EHCI device.
 devices_SRC += devices/usb_storage.c	# USB mass storage class driver.
 devices_SRC += devices/usb_hub.c	# USB hub class driver.
+devices_SRC += devices/e1000.c
 
 # Library code shared between kernel and user programs.
 lib_SRC  = lib/debug.c			# Debug helpers.

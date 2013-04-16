@@ -10,7 +10,7 @@
 #include "filesys/filesys.h"
 #include <console.h>
 #include <devices/input.h>
-#include "vm/vm.h"
+
 struct lock sys_file_io;
 
 static void syscall_handler (struct intr_frame *);
@@ -27,8 +27,6 @@ static int sys_write (int fd, const void *buffer, unsigned length);
 static void sys_seek (int fd, unsigned position);
 static unsigned sys_tell (int fd);
 static void sys_close (int fd);
-static int mmap(int fd, void* addr);
-static void munmap(int mapping);
 
 #define FIRST(f) (*(f + 1))
 #define SECOND(f) (*(f + 2))
@@ -95,12 +93,6 @@ syscall_handler (struct intr_frame *f)
       break;
     case SYS_CLOSE:
       sys_close (FIRST(p));
-      break;
-    case SYS_MMAP:
-      f->eax = mmap(FIRST(p), (void *) *(p + 2));
-      break;
-    case SYS_MUNMAP:
-      munmap (FIRST(p));
       break;
     default:
       sys_exit (-1);
@@ -192,63 +184,6 @@ get_file (int fd, bool remove)
     t->fd_table[fd - 2] = NULL;
   return f;
 }
-
-static int
-mmap(int fd, void* addr)
-{
-  //Don't allow the mmapped file descriptor to be equal to stdin or stdout
-  if(!is_valid_fd(fd))
-    return -1;
-
-  //Disallow null addresses
-  if(addr == NULL) 
-    return -1;
-
-  //Don't allow mmaps to map over existing data/code 
-  if(get_sup_page_entry(&thread_current()->sup_page_table, pg_round_down(addr)) != NULL)
-  {
-    return -1;
-  }
-
-  if(addr >= (void*) (PHYS_BASE - 4096))
-    return -1;
-  
-  //All addresses should be page aligned
-  if(pg_ofs(addr) != 0)
-    return -1;
-
-  struct file *file = get_file (fd, false);
-  if(file == NULL)
-    return -1;
-  if(file_length(file) <= 0)
-    return -1;
-  struct file *reopened_file = file_reopen(file);
-  int mapid_t = insert_mmap_entry(reopened_file, file_length(reopened_file), addr); 
-
-  return mapid_t;
-}
-
-static void
-munmap(int mapping)
-{
-  struct thread* thread = thread_current();
-  lock_acquire(&thread->mmap_lock);
-  struct mmap_table_entry* entry;
-  struct list_elem* e;
-  for (e = list_begin(&thread->mmap_list); e != list_end(&thread->mmap_list); e = list_next(e))
-  {
-    entry = list_entry(e, struct mmap_table_entry, listelem);
-    if(entry->mapid_t == mapping)
-    {
-      mmap_write_back(entry);
-      hash_delete(&thread->mmap_table, &entry->elem);
-      palloc_free_page(entry->page);
-    }
-  }
-
-  lock_release(&thread->mmap_lock); 
-}
-
 
 static void
 sys_seek (int fd, unsigned position)

@@ -7,4 +7,5 @@ typedef int pid_t;
 void syscall_init (void);
 int sys_exit (int);
 
+void pci_print(void);
 #endif /* userprog/syscall.h */

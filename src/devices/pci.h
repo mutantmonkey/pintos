@@ -5,6 +5,63 @@
 #include <stddef.h>
 
 /**************************/
+/* Helper defines         */
+/**************************/
+
+#define	PCI_MAPREG_START		0x10
+#define	PCI_MAPREG_END			0x28
+#define	PCI_MAPREG_ROM			0x30
+#define	PCI_MAPREG_PPB_END		0x18
+#define	PCI_MAPREG_PCB_END		0x14
+
+#define PCI_MAPREG_NUM(offset)						\
+	    (((unsigned)(offset)-PCI_MAPREG_START)/4)
+
+#define	PCI_MAPREG_TYPE(mr)						\
+	    ((mr) & PCI_MAPREG_TYPE_MASK)
+#define	PCI_MAPREG_TYPE_MASK			0x00000001
+
+#define	PCI_MAPREG_TYPE_MEM			0x00000000
+#define	PCI_MAPREG_TYPE_IO			0x00000001
+#define	PCI_MAPREG_ROM_ENABLE			0x00000001
+
+#define	PCI_MAPREG_MEM_TYPE(mr)						\
+	    ((mr) & PCI_MAPREG_MEM_TYPE_MASK)
+#define	PCI_MAPREG_MEM_TYPE_MASK		0x00000006
+
+#define	PCI_MAPREG_MEM_TYPE_32BIT		0x00000000
+#define	PCI_MAPREG_MEM_TYPE_32BIT_1M		0x00000002
+#define	PCI_MAPREG_MEM_TYPE_64BIT		0x00000004
+
+#define	PCI_MAPREG_MEM_PREFETCHABLE(mr)				\
+	    (((mr) & PCI_MAPREG_MEM_PREFETCHABLE_MASK) != 0)
+#define	PCI_MAPREG_MEM_PREFETCHABLE_MASK	0x00000008
+
+#define	PCI_MAPREG_MEM_ADDR(mr)						\
+	    ((mr) & PCI_MAPREG_MEM_ADDR_MASK)
+#define	PCI_MAPREG_MEM_SIZE(mr)						\
+	    (PCI_MAPREG_MEM_ADDR(mr) & -PCI_MAPREG_MEM_ADDR(mr))
+#define	PCI_MAPREG_MEM_ADDR_MASK		0xfffffff0
+
+#define	PCI_MAPREG_MEM64_ADDR(mr)					\
+	    ((mr) & PCI_MAPREG_MEM64_ADDR_MASK)
+#define	PCI_MAPREG_MEM64_SIZE(mr)					\
+	    (PCI_MAPREG_MEM64_ADDR(mr) & -PCI_MAPREG_MEM64_ADDR(mr))
+#define	PCI_MAPREG_MEM64_ADDR_MASK		0xfffffffffffffff0ULL
+
+#define	PCI_MAPREG_IO_ADDR(mr)						\
+	    ((mr) & PCI_MAPREG_IO_ADDR_MASK)
+#define	PCI_MAPREG_IO_SIZE(mr)						\
+	    (PCI_MAPREG_IO_ADDR(mr) & -PCI_MAPREG_IO_ADDR(mr))
+#define	PCI_MAPREG_IO_ADDR_MASK			0xfffffffc
+
+#define PCI_MAPREG_SIZE_TO_MASK(size)					\
+	    (-(size))
+
+#define PCI_MAPREG_NUM(offset)						\
+	    (((unsigned)(offset)-PCI_MAPREG_START)/4)
+
+/**************************/
 /* some major/minor pairs */
 /**************************/
 #define PCI_MAJOR_EARLY			0
@@ -108,5 +165,7 @@ void pci_write_out (struct pci_io *, int off, size_t sz, const void *buf);
 void pci_print_stats (void);
 void pci_mask_irq (struct pci_dev *);
 void pci_unmask_irq (struct pci_dev *);
+
+void pci_enable(struct pci_dev *);
 
 #endif
