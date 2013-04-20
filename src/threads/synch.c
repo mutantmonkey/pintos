@@ -31,6 +31,7 @@
 #include <string.h>
 #include "threads/interrupt.h"
 #include "threads/thread.h"
+#include "devices/timer.h"
 
 /* Initializes semaphore SEMA to VALUE.  A semaphore is a
    nonnegative integer along with two atomic operators for
@@ -76,6 +77,7 @@ sema_down (struct semaphore *sema)
   ASSERT (!intr_context ());
 
   old_level = intr_disable ();
+  sema->unblock_ticks = 0;
   while (sema->value == 0) 
     {
       list_insert_ordered (&sema->waiters, &thread_current ()->elem,
@@ -84,6 +86,48 @@ sema_down (struct semaphore *sema)
     }
   sema->value--;
   intr_set_level (old_level);
+}
+
+/* Down or "P" operation on a semaphore.  Waits for SEMA's value
+   to become positive and then atomically decrements it.
+
+   This function may sleep, so it must not be called within an
+   interrupt handler.  This function may be called with
+   interrupts disabled, but if it sleeps then the next scheduled
+   thread will probably turn interrupts back on. */
+uint64_t
+sema_down_timeout (struct semaphore *sema, int timeout) 
+{
+  enum intr_level old_level;
+  uint64_t ticks = timer_ticks ();
+  uint64_t elapsed = 0;
+
+  ASSERT (sema != NULL);
+  ASSERT (!intr_context ());
+
+  old_level = intr_disable ();
+
+  sema->unblock_ticks = ticks + timer_secs_ticks (timeout, 1000);
+  if (timeout > 0) {
+    list_push_back (&sema_timeout_list, &sema->elem);
+  }
+
+  while (sema->value == 0) 
+    {
+      list_insert_ordered (&sema->waiters, &thread_current ()->elem,
+			   effective_less, NULL);
+      thread_block ();
+    }
+
+  if (timeout > 0) {
+    list_remove (&sema->elem);
+    elapsed = timer_ticks_secs (timer_elapsed (ticks), 1000);
+  }
+
+  sema->value--;
+  intr_set_level (old_level);
+
+  return elapsed;
 }
 
 /* Down or "P" operation on a semaphore, but only if the
@@ -174,7 +218,7 @@ sema_test_helper (void *sema_)
       sema_up (&sema[1]);
     }
 }
-
+
 /* Initializes LOCK.  A lock can be held by at most a single
    thread at any given time.  Our locks are not "recursive", that
    is, it is an error for the thread currently holding a lock to

@@ -24,7 +24,7 @@ static int64_t ticks;
    Initialized by timer_calibrate(). */
 static unsigned loops_per_tick;
 
-/* List of threads that are sleeping */
+/* List of threads that are sleeping. */
 static struct list alarm_list;
 
 static intr_handler_func timer_interrupt;
@@ -87,6 +87,20 @@ int64_t
 timer_elapsed (int64_t then) 
 {
   return timer_ticks () - then;
+}
+
+/* Convert NUM/DENOM seconds to timer ticks. */
+int64_t
+timer_secs_ticks (int64_t num, int32_t denom)
+{
+  return num * TIMER_FREQ / denom;
+}
+
+/* Convert TICKS to DENOM seconds. */
+int64_t
+timer_ticks_secs (int64_t ticks, int32_t denom)
+{
+  return ticks / TIMER_FREQ * denom;
 }
 
 /* Sleeps for approximately TICKS timer ticks.  Interrupts must
@@ -191,6 +205,19 @@ timer_interrupt (struct intr_frame *args UNUSED)
 
   ticks++;
 
+  /* Iterate through list of semaphores and look for any to wake. */
+   for (e = list_begin (&sema_timeout_list);
+       e != list_end (&sema_timeout_list); e = list_next (e))
+  {
+    struct semaphore *sema = list_entry (e, struct semaphore, elem);
+
+    if ((int64_t)sema->unblock_ticks <= timer_ticks ())
+    {
+      sema->unblock_ticks = 0;
+      sema_up (sema);
+    }
+  }
+
   /* Iterate through waiting list and look for processes to wake. */
   for (e = list_begin (&alarm_list); e != list_end (&alarm_list);
        e = list_next (e))
@@ -201,7 +228,6 @@ timer_interrupt (struct intr_frame *args UNUSED)
     {
       list_remove (&t->alarm_elem);
       thread_unblock (t);
-      //thread_yield ();
     }
   }
 

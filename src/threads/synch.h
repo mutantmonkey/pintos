@@ -3,6 +3,7 @@
 
 #include <list.h>
 #include <stdbool.h>
+#include <stdint.h>
 
 bool effective_less (const struct list_elem *, const struct list_elem *,
 		     void *aux);
@@ -12,10 +13,14 @@ struct semaphore
   {
     unsigned value;             /* Current value. */
     struct list waiters;        /* List of waiting threads. */
+
+    uint64_t unblock_ticks;
+    struct list_elem elem;
   };
 
 void sema_init (struct semaphore *, unsigned value);
 void sema_down (struct semaphore *);
+uint64_t sema_down_timeout (struct semaphore *, int timeout);
 bool sema_try_down (struct semaphore *);
 void sema_up (struct semaphore *);
 void sema_self_test (void);

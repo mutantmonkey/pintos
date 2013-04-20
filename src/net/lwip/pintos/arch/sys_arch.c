@@ -38,9 +38,14 @@ sys_sem_signal(sys_sem_t *sem)
 u32_t
 sys_arch_sem_wait(sys_sem_t *sem, u32_t timeout)
 {
-  // TODO: implement timeout
-  sema_down (sem);
-  return 0;
+  u32_t elapsed = sema_down_timeout (sem, timeout);
+
+  if (timeout > 0 && sem->unblock_ticks == 0) {
+    return SYS_ARCH_TIMEOUT;
+  }
+  else {
+    return elapsed;
+  }
 }
 
 int
@@ -69,7 +74,6 @@ sys_mbox_new(sys_mbox_t *mbox, int size)
 void
 sys_mbox_free(sys_mbox_t *mbox)
 {
-  // TODO: ensure there are no messages still in the mailbox
   free (mbox);
 }
 
@@ -87,14 +91,19 @@ u32_t
 sys_arch_mbox_fetch(sys_mbox_t *mbox, void **msg, u32_t timeout)
 {
   struct mbox_entry *entry;
+  u32_t elapsed;
 
   if (!list_empty (&mbox->queue)) {
-    // TODO: implement timeout
-    sema_down (&mbox->wait);
+    elapsed = sys_arch_sem_wait(&mbox->wait, timeout);
+    if (elapsed == SYS_ARCH_TIMEOUT) {
+      return SYS_ARCH_TIMEOUT;
+    }
 
     entry = list_entry (list_pop_front (&mbox->queue), struct mbox_entry, elem);
     msg = &entry->msg;
   }
+
+  return elapsed;
 }
 
 u32_t
