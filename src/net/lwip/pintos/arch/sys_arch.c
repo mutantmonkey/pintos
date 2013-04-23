@@ -93,15 +93,13 @@ sys_arch_mbox_fetch(sys_mbox_t *mbox, void **msg, u32_t timeout)
   struct mbox_entry *entry;
   u32_t elapsed;
 
-  if (!list_empty (&mbox->queue)) {
-    elapsed = sys_arch_sem_wait(&mbox->wait, timeout);
-    if (elapsed == SYS_ARCH_TIMEOUT) {
-      return SYS_ARCH_TIMEOUT;
-    }
-
-    entry = list_entry (list_pop_front (&mbox->queue), struct mbox_entry, elem);
-    msg = &entry->msg;
+  elapsed = sys_arch_sem_wait (&mbox->wait, timeout);
+  if (elapsed == SYS_ARCH_TIMEOUT) {
+    return SYS_ARCH_TIMEOUT;
   }
+
+  entry = list_entry (list_pop_front (&mbox->queue), struct mbox_entry, elem);
+  msg = &entry->msg;
 
   return elapsed;
 }
