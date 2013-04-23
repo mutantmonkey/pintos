@@ -643,7 +643,6 @@ sub run_qemu {
     print "warning: qemu doesn't support jitter\n"
       if defined $jitter;
     my (@cmd) = ('qemu');
-    push (@cmd, '-no-kqemu');
     if ($fake_usb) {
 	push (@cmd, '-hda', $disks[0]) if defined $disks[0];
 	push (@cmd, '-usb');
@@ -655,7 +654,8 @@ sub run_qemu {
 	push (@cmd, '-hdd', $disks[3]) if defined $disks[3];
     }
     push (@cmd, '-m', $mem);
-    push (@cmd, '-net', 'none');
+    push (@cmd, '-netdev', 'tap,id=pintos0');
+    push (@cmd, '-device', 'e1000,netdev=pintos0,bus=pci.0,addr=0x3');
     push (@cmd, '-nographic') if $vga eq 'none';
     push (@cmd, '-serial', 'stdio') if $serial && $vga ne 'none';
     push (@cmd, '-S') if $debug eq 'monitor';
@@ -807,7 +807,7 @@ sub disk_geometry {
 # Also prints the command it's running and checks that it succeeded.
 sub run_command {
     print join (' ', @_), "\n";
-    die "command failed\n" if xsystem (@_);
+    die "command failed\n" if xsystem (@_) && ($_[0] ne "qemu");
 }
 
 # xsystem(@args)
