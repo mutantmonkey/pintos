@@ -285,11 +285,14 @@ thread_create (const char *name, int priority,
   t->parent = thread_current ();
   t->wait = &stat->parent_wait;
   t->exit_status = &stat->status;
+
+#ifdef FILESYS
   if (strcmp(t->name, "idle") != 0) 
     {
       t->me = filesys_open(t->name);
       file_deny_write(t->me);
     }
+#endif
 
   /* Add to run queue. */
   thread_unblock (t);
