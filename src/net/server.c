@@ -1,8 +1,13 @@
 #include <stdint.h>
 #include <threads/thread.h>
-#include <lwip/ip_addr.h>
-#include <lwip/netif.h>
 #include <lwip/inet.h>
+#include <lwip/ip_addr.h>
+#include <lwip/memp.h>
+#include <lwip/netif.h>
+#include <lwip/stats.h>
+#include <lwip/sys.h>
+#include <lwip/tcp_impl.h>
+#include <lwip/udp.h>
 #include <netif/etharp.h>
 #include "net/server.h"
 #include "net/timer.h"
@@ -10,6 +15,8 @@
 struct netif nif;
 
 static struct timer_args timer_arp;
+static struct timer_args timer_tcpf;
+static struct timer_args timer_tcps;
 
 static void start_timer(struct timer_args *, void (*func)(void), const char *, int64_t);
 static void lwip_init(struct netif *, uint32_t, uint32_t, uint32_t);
@@ -17,18 +24,28 @@ static void lwip_init(struct netif *, uint32_t, uint32_t, uint32_t);
 void
 net_init(void)
 {
-    printf ("Initializing network...\n");
+    printf ("Initializing network...");
 
-    //tcpip_init (&tcpip_init_done, &done);
+    stats_init ();
+    sys_init ();
+    mem_init ();
+    memp_init ();
+    pbuf_init ();
+    etharp_init ();
+    ip_init ();
+    udp_init ();
+    tcp_init ();
+
     lwip_init (&nif, inet_addr(NET_IP), inet_addr(NET_MASK),
             inet_addr(NET_GATEWAY));
-    etharp_init ();
 
-    // TODO: set up other timers
-    start_timer(&timer_arp, &etharp_tmr, "arp timer", ARP_TMR_INTERVAL);
+    // set up ARP and TCP timers
+    start_timer (&timer_arp, &etharp_tmr, "arp timer", ARP_TMR_INTERVAL);
+    start_timer (&timer_tcpf, &tcp_fasttmr, "tcp fast timer", TCP_FAST_INTERVAL);
+    start_timer (&timer_tcps, &tcp_slowtmr, "tcp slow timer", TCP_SLOW_INTERVAL);
 
     struct in_addr ia = {inet_addr(NET_IP)};
-    printf ("%02x:%02x:%02x:%02x:%02x:%02x bound to %s\n",
+    printf ("%02x:%02x:%02x:%02x:%02x:%02x bound to %s.\n",
             nif.hwaddr[0], nif.hwaddr[1], nif.hwaddr[2],
             nif.hwaddr[3], nif.hwaddr[4], nif.hwaddr[5],
             inet_ntoa(ia));
