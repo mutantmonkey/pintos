@@ -83,6 +83,7 @@ filesys_SRC += filesys/inode.c		# File headers.
 filesys_SRC += filesys/fsutil.c		# Utilities.
 
 # Network code.
+net_SRC  = net/server.c
 net/lwip/api_SRC  = net/lwip/api/api_lib.c
 net/lwip/api_SRC += net/lwip/api/api_msg.c
 net/lwip/api_SRC += net/lwip/api/err.c

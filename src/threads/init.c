@@ -19,6 +19,7 @@
 #include "devices/rtc.h"
 #ifdef NET
 #include "devices/e1000.h"
+#include "net/server.h"
 #endif
 #include "threads/interrupt.h"
 #include "threads/io.h"
@@ -141,6 +142,9 @@ main (void)
 #endif
 #ifdef VM
   frame_table_init();
+#endif
+#ifdef NET
+  net_init ();
 #endif
   printf ("Boot complete.\n");
   
