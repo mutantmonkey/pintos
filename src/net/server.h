@@ -8,6 +8,6 @@
 #define NET_GATEWAY "10.177.0.1"
 
 void net_init (void);
-err_t eth_init (struct netif *nif);
+err_t eth_init (struct netif *);
 
 #endif

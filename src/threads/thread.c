@@ -290,7 +290,8 @@ thread_create (const char *name, int priority,
   if (strcmp(t->name, "idle") != 0) 
     {
       t->me = filesys_open(t->name);
-      file_deny_write(t->me);
+      if (t->me != NULL)
+        file_deny_write(t->me);
     }
 #endif
 
