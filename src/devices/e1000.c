@@ -72,7 +72,7 @@ e1000_init(void)
   pci_reg_write32(io, E1000_EERD, pci_reg_read32(io, E1000_EERD) | E1000_EERD_START);
   
   while( ! (pci_reg_read32(io, E1000_EERD) & E1000_EERD_DONE));
-      pci_reg_write32(io, E1000_RAL, pci_reg_read32(io, E1000_EERD) >> 16);
+  pci_reg_write32(io, E1000_RAL, pci_reg_read32(io, E1000_EERD) >> 16);
  
   
   pci_reg_write32(io, E1000_EERD, 0x1 << 8);
@@ -159,12 +159,17 @@ e1000_receive(char *data)
     len = rcv_desc_array[rdt].length;
 
     memmove(data, rcv_pkt_bufs[rdt].buf, len);
-    //HEXDUMP("rx dump:", data, len);
+    hex_dump(data, data, len, true);
     rcv_desc_array[rdt].status &= ~E1000_RXD_STAT_DD;
     rcv_desc_array[rdt].status &= ~E1000_RXD_STAT_EOP;
     //e1000[E1000_RDT] = (rdt + 1) % E1000_RCVDESC;
     pci_reg_write32(io, E1000_RDT, (rdt + 1) % E1000_RCVDESC);
     return len;
+  }
+  else {
+      printf("%x\n", rcv_desc_array[rdt].status);
+      printf("%x\n", rdt);
+
   }
   return -E_RCV_EMPTY;
 }

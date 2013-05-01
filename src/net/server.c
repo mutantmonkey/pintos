@@ -9,6 +9,7 @@
 #include <lwip/tcp_impl.h>
 #include <lwip/udp.h>
 #include <netif/etharp.h>
+#include "net/input.h"
 #include "net/server.h"
 #include "net/timer.h"
 
@@ -43,6 +44,8 @@ net_init(void)
     start_timer (&timer_arp, &etharp_tmr, "arp timer", ARP_TMR_INTERVAL);
     start_timer (&timer_tcpf, &tcp_fasttmr, "tcp fast timer", TCP_FAST_INTERVAL);
     start_timer (&timer_tcps, &tcp_slowtmr, "tcp slow timer", TCP_SLOW_INTERVAL);
+
+    thread_create ("net input", 0, &net_input, NULL);
 
     struct in_addr ia = {inet_addr(NET_IP)};
     printf ("%02x:%02x:%02x:%02x:%02x:%02x bound to %s.\n",
