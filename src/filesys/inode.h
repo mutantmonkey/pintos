@@ -5,6 +5,9 @@
 #include "filesys/off_t.h"
 #include "devices/block.h"
 
+#define DIRECTORY 0x4000
+#define FILE      0x8000
+
 struct bitmap;
 
 void inode_init (void);
@@ -18,6 +21,10 @@ off_t inode_read_at (struct inode *, void *, off_t size, off_t offset);
 off_t inode_write_at (struct inode *, const void *, off_t size, off_t offset);
 void inode_deny_write (struct inode *);
 void inode_allow_write (struct inode *);
+void inode_set_mode (struct inode *, uint32_t mode);
+bool inode_isdir (struct inode *);
 off_t inode_length (const struct inode *);
+void inode_lock (struct inode *);
+void inode_unlock (struct inode *);
 
 #endif /* filesys/inode.h */

@@ -7,6 +7,8 @@
 #include "filesys/free-map.h"
 #include "filesys/inode.h"
 #include "filesys/directory.h"
+#include "threads/malloc.h"
+#include "threads/thread.h"
 
 /* Partition that contains the file system. */
 struct block *fs_device;
@@ -38,9 +40,9 @@ void
 filesys_done (void) 
 {
   free_map_close ();
-  //  buffer_shutdown ();
+  buffer_shutdown ();
 }
-
+
 /* Creates a file named NAME with the given INITIAL_SIZE.
    Returns true if successful, false otherwise.
    Fails if a file named NAME already exists,
@@ -49,16 +51,110 @@ bool
 filesys_create (const char *name, off_t initial_size) 
 {
   block_sector_t inode_sector = 0;
-  struct dir *dir = dir_open_root ();
+  int name_offset;
+  struct file *dir = dir_resolve (name, &name_offset);
+  const char *filename = name + name_offset;
+  if (strchr(filename, '/'))
+    return false;
+
   bool success = (dir != NULL
                   && free_map_allocate (1, &inode_sector)
                   && inode_create (inode_sector, initial_size)
-                  && dir_add (dir, name, inode_sector));
+                  && dir_add (dir, filename, inode_sector));
   if (!success && inode_sector != 0) 
     free_map_release (inode_sector, 1);
   dir_close (dir);
 
   return success;
+}
+
+bool
+filesys_mkdir (const char *name)
+{
+  if (*name == '\0')
+    return false;
+  block_sector_t inode_sector = 0, parent = 0;
+  int name_offset;
+  char *find = NULL;
+  struct file *dir = dir_resolve (name, &name_offset);
+  const char *filename = name + name_offset;
+  if (dir == NULL)
+    return false;
+
+  find = malloc (sizeof(char) * strlen(filename));
+  if (find == NULL)
+    {
+      dir_close (dir);
+      return false;
+    }
+
+  if (strchr (filename, '/'))
+    strlcpy (find, filename, strlen(filename));
+  else
+    strlcpy (find, filename, strlen(filename) + 1);
+
+  parent = inode_get_inumber (dir_get_inode (dir));
+  // Figure out directory name
+  bool success = (dir != NULL
+		  && free_map_allocate (1, &inode_sector)
+		  && inode_create (inode_sector, 0)
+		  && dir_add (dir, find, inode_sector));
+  dir_close (dir);
+  if (success == false)
+    {
+      free (find);
+      return success;
+    }
+  dir = dir_open (inode_open (inode_sector));
+  inode_set_mode (file_get_inode (dir), DIRECTORY);
+  dir_add (dir, ".", inode_sector);
+  dir_add (dir, "..", parent);
+  dir_close (dir);
+  free (find);
+  return success;
+}
+
+bool
+filesys_chdir (const char *name)
+{
+  // They want the root, so give it to them!
+  // Bit of a kludge, but not especially.
+  if (strcmp (name, "/") == 0)
+    {
+      thread_current ()->cwd = ROOT_DIR_SECTOR;
+      return true;
+    }
+
+  int name_offset;
+  char *find = NULL;
+  struct file *dir = dir_resolve (name, &name_offset);
+  const char *filename = name + name_offset;
+  if (dir == NULL)
+    return false;
+
+  find = malloc (sizeof(char) * strlen(filename));
+  if (find == NULL)
+    {
+      dir_close (dir);
+      return false;
+    }
+
+  if (strchr (filename, '/'))
+    strlcpy (find, filename, strlen(filename));
+  else
+    strlcpy (find, filename, strlen(filename) + 1);
+      
+  // Figure out directory name
+  struct inode *found;
+  dir_lookup (dir, find, &found);
+  if (found == NULL)
+    {
+      free (find);
+      return false;
+    }
+  thread_current ()->cwd = inode_get_inumber (found);
+  free (find);
+  return true;
 }
 
 /* Opens the file with the given NAME.
@@ -69,11 +165,35 @@ filesys_create (const char *name, off_t initial_size)
 struct file *
 filesys_open (const char *name)
 {
-  struct dir *dir = dir_open_root ();
-  struct inode *inode = NULL;
+  if (strcmp (name, "/") == 0)
+    return dir_open_root ();
 
-  if (dir != NULL)
-    dir_lookup (dir, name, &inode);
+  int name_offset;
+  char *find = NULL;
+  struct file *dir = dir_resolve (name, &name_offset);
+  const char *filename = name + name_offset;
+  if (dir == NULL)
+    return false;
+  printf("Resolved Directory\t");
+
+  find = malloc (sizeof(char) * strlen(filename));
+  if (find == NULL)
+    {
+      dir_close (dir);
+      return false;
+    }
+  printf("Allocated Buffer\t");
+
+  if (strchr ((name + name_offset), '/'))
+    strlcpy (find, filename, strlen(filename));
+  else
+    strlcpy (find, filename, strlen(filename) + 1);
+  struct inode *inode = NULL;
+  printf("Looking for %s\t", filename);
+
+  dir_lookup (dir, filename, &inode);
+  if (inode != NULL)
+    printf("Found File\n");
   dir_close (dir);
 
   return file_open (inode);
@@ -86,21 +206,47 @@ filesys_open (const char *name)
 bool
 filesys_remove (const char *name) 
 {
-  struct dir *dir = dir_open_root ();
-  bool success = dir != NULL && dir_remove (dir, name);
+  // No, you can't remove this. Period.
+  if (strcmp (name, "/") == 0)
+    return false;
+
+  int name_offset;
+  char *find = NULL;
+  struct file *dir = dir_resolve (name, &name_offset);
+  const char *filename = name + name_offset;
+  if (dir == NULL)
+    return false;
+
+  find = malloc (sizeof(char) * strlen(filename));
+  if (find == NULL)
+    {
+      dir_close (dir);
+      return false;
+    }
+
+  if (strchr ((name + name_offset), '/'))
+    strlcpy (find, filename, strlen(filename));
+  else
+    strlcpy (find, filename, strlen(filename) + 1);
+
+  bool success = dir != NULL && dir_remove (dir, find);
   dir_close (dir); 
 
   return success;
 }
-
+
 /* Formats the file system. */
 static void
 do_format (void)
 {
   printf ("Formatting file system...");
   free_map_create ();
-  if (!dir_create (ROOT_DIR_SECTOR, 16))
+  if (!dir_create (ROOT_DIR_SECTOR, 2))
     PANIC ("root directory creation failed");
+  struct file *root = dir_open (inode_open (ROOT_DIR_SECTOR));
+  dir_add (root, ".", ROOT_DIR_SECTOR);
+  dir_add (root, "..", ROOT_DIR_SECTOR);
+  dir_close (root);
   free_map_close ();
   printf ("done.\n");
 }

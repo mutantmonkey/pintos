@@ -7,6 +7,7 @@
 #include "synch.h"
 #include "fixed-point.h"
 #include <hash.h>
+#include "devices/block.h"
 
 
 /* States in a thread's life cycle. */
@@ -96,9 +97,9 @@ struct thread
     struct list holding;                /* Locks this thread is holding. */
     struct lock *waiting_for;           /* Lock this thread is waiting for. */
     struct list_elem allelem;           /* List element for all threads list. */
-    struct file *fd_table[128];         /* An array of file pointers where index is the file descriptor */
+    struct file **fd_table;             /* An array of file pointers where index is the file descriptor */
     struct file *me;                    /* The file this thread is running */
-
+    block_sector_t cwd;                 /* The sector corresponding to this threads current working directory. */
     struct list children;               /* Child threads of this thread. */
     struct lock child_lock;
     struct list_elem child_elem;        /* List element used in child threads. */

@@ -184,8 +184,8 @@ process_wait (tid_t child_tid)
       sema_down (&t->parent_wait);
       int status = t->status;
       list_remove(e);
-      lock_release(&cur->child_lock);
       free (t);
+      lock_release(&cur->child_lock);
       return status;
     }
   }
@@ -202,23 +202,36 @@ process_exit (void)
   uint32_t *pd;
   int i;
   mmap_exit();
-  for (i = 0; i < 128; i++)
-    if (cur->fd_table[i] != NULL)
-      file_close (cur->fd_table[i]);
+  if (cur->fd_table != NULL)
+    {
+      for (i = 0; i < 128; i++)
+	if (cur->fd_table[i] != NULL)
+	  file_close (cur->fd_table[i]);
+      free (cur->fd_table);
+      cur->fd_table = NULL;
+    }
 
-  file_close (cur->me);
+  if (cur->me != NULL)
+    {
+      file_close (cur->me);
+      cur->me = NULL;
+    }
   if (cur->wait != NULL)
     sema_up (cur->wait);
 
   struct list_elem *e;
   lock_acquire(&cur->child_lock);
-  for (e = list_begin(&cur->children); e != list_end(&cur->children);
-       e = list_next(e))
+  for (e = list_begin(&cur->children); e != list_end(&cur->children);)
     {
       t = list_entry(e, struct exit_status, elem);
-      list_remove(e);
-      t->child->wait = NULL;
-      t->child->exit_status = NULL;
+      if (t->child != NULL)
+	{
+	  t->child->wait = NULL;
+	  t->child->exit_status = NULL;
+	}
+      // Get the next guy in the list before we free the struct with 
+      // our list element in it.
+      e = list_remove (e);
       free(t);
     }
   lock_release(&cur->child_lock);

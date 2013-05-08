@@ -56,6 +56,7 @@ bool effective_less (const struct list_elem *a,
 		    const struct list_elem *b,
 		    void *aux UNUSED)
 {
+  //  printf("A: %p, B: %p\n", a, b);
   return list_entry (a, struct thread, elem)->effective < 
     list_entry (b, struct thread, elem)->effective;
 }
@@ -120,23 +121,34 @@ void
 sema_up (struct semaphore *sema) 
 {
   enum intr_level old_level;
+  struct thread *t = NULL;
 
   ASSERT (sema != NULL);
 
   old_level = intr_disable ();
-  bool yield = false;
   sema->value++;
-  if (!list_empty(&sema->waiters))
+  if (!list_empty (&sema->waiters))
     {
       struct list_elem *e = list_max (&sema->waiters, effective_less, NULL);
-      list_remove(e);
-      thread_unblock (list_entry (e, struct thread, elem));
-      yield = true;
+      list_remove (e);
+      
+      t = list_entry (e, struct thread, elem);
+      thread_unblock (t);
     }
-  intr_set_level (old_level);
-  if (yield)
-    thread_yield ();
+  
+  if (t != NULL && t->effective > thread_get_priority ())
+    {
+      if (intr_context())
+	{
+	  intr_yield_on_return ();
+	}
+      else
+	{
+	  thread_yield ();
+	}
+    }
 }
+
 
 static void sema_test_helper (void *sema_);
 

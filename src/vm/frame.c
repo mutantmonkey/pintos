@@ -8,6 +8,9 @@
 #include "threads/palloc.h"
 #include "vm/vm.h"
 
+struct list frame_table;
+struct lock frame_table_lock;
+
 //void remove_frame_entry(void *frame);
 struct frame_table_entry* get_frame_entry(void *frame);
 struct frame_table_entry* create_frame_entry(void* frame, struct sup_page_table_entry* entry);
@@ -91,6 +94,8 @@ struct frame_table_entry* clock_evict()
       lock_release(&frame_table_lock);
       return evictee;
     }
+    if (e == list_end (&frame_table))
+      e = list_begin (&frame_table);
   }
   evictee = list_entry(list_pop_front(&frame_table), struct frame_table_entry, frame_table_elem);
   pagedir_clear_page(evictee->thread->pagedir, evictee->page->addr);

@@ -4,7 +4,7 @@
 #include "devices/block.h"
 #include <stdbool.h>
 
-#define NUM_BLOCK 64
+#define NUM_BLOCK 32
 #define NUM_PAGES 8
 
 struct cache_block;

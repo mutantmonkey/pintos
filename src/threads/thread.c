@@ -120,6 +120,7 @@ thread_init (void)
   init_thread (initial_thread, "main", PRI_DEFAULT);
   initial_thread->status = THREAD_RUNNING;
   initial_thread->tid = allocate_tid ();
+  initial_thread->cwd = ROOT_DIR_SECTOR;
 }
 
 /* Starts preemptive thread scheduling by enabling interrupts.
@@ -275,27 +276,47 @@ thread_create (const char *name, int priority,
   sf->eip = switch_entry;
   sf->ebp = 0;
 
-  struct exit_status *stat = malloc (sizeof(struct exit_status));
-  if (stat == NULL)
+  // Don't do any of this for utility threads, ESPECIALLY,
+  // give them memory they don't use.
+  if (strcmp(t->name, "idle") != 0 && strcmp(t->name, "KCacheD") != 0) 
     {
-      palloc_free_page(t);
-      return TID_ERROR;
-    }
-
-  sema_init(&stat->parent_wait, 0);
-  stat->tid = tid;
-  stat->status = 100;
-  stat->child = t;
-  lock_acquire (&(thread_current ()->child_lock));
-  list_push_back (&(thread_current()->children), &stat->elem);
-  lock_release (&(thread_current ()->child_lock));
-  t->parent = thread_current ();
-  t->wait = &stat->parent_wait;
-  t->exit_status = &stat->status;
-  if (strcmp(t->name, "idle") != 0) 
-    {
+      struct exit_status *stat = malloc (sizeof(struct exit_status));
+      if (stat == NULL)
+	{
+	  palloc_free_page(t);
+	  return TID_ERROR;
+	}
+      
+      struct thread *cur = thread_current ();
+      
+      sema_init(&stat->parent_wait, 0);
+      stat->tid = tid;
+      stat->status = 100;
+      stat->child = t;
+      t->parent = cur;
+      t->wait = &stat->parent_wait;
+      t->exit_status = &stat->status;
+      
+      lock_acquire (&cur->child_lock);
+      list_push_back (&cur->children, &stat->elem);
+      lock_release (&cur->child_lock);
+      
+      t->cwd = cur->cwd;
+      
+      t->fd_table = malloc (128 * sizeof (struct file *));
+      if (t->fd_table == NULL)
+	{
+	  palloc_free_page(t);
+	  return TID_ERROR;
+	}
+      int i;
+      for (i = 0; i < 128; i++)
+	t->fd_table[i] = NULL;
+      
       t->me = filesys_open(t->name);
       file_deny_write(t->me);
+      if (cur == (void*)0xc020c000)
+	printf("List: %p\n", &cur->children);
     }
 
   /* Add to run queue. */
@@ -391,7 +412,8 @@ thread_exit (void)
   ASSERT (!intr_context ());
 
 #ifdef USERPROG
-  process_exit ();
+  if (strcmp (thread_current ()->name, "KCacheD") != 0)
+    process_exit ();
 #endif
 
   /* Remove thread from all threads list, set our status to dying,
@@ -608,9 +630,6 @@ init_thread (struct thread *t, const char *name, int priority)
   lock_init(&t->child_lock);
   t->latest_mapid_t = 0;
   sema_init(&t->exec_synch, 0);
-  int i;
-  for (i = 0; i < 128; i++)
-    t->fd_table[i] = NULL;
   t->nice = 0;
   t->recent_cpu = 0;
 

@@ -2,12 +2,12 @@
 #include <debug.h>
 #include "filesys/inode.h"
 #include "threads/malloc.h"
+#include "threads/synch.h"
 
 /* An open file. */
 struct file 
   {
     struct inode *inode;        /* File's inode. */
-    unsigned ref_counter;
     bool delete;
     off_t pos;                  /* Current position. */
     bool deny_write;            /* Has file_deny_write() been called? */
@@ -33,6 +33,16 @@ file_open (struct inode *inode)
       free (file);
       return NULL; 
     }
+}
+
+void file_lock (struct file *file)
+{
+  inode_lock (file->inode);
+}
+
+void file_unlock (struct file *file)
+{
+  inode_unlock (file->inode);
 }
 
 /* Opens and returns a new file for the same inode as FILE.
@@ -167,4 +177,16 @@ file_tell (struct file *file)
 {
   ASSERT (file != NULL);
   return file->pos;
+}
+
+int
+file_get_inumber (struct file *file)
+{
+  return inode_get_inumber (file->inode);
+}
+
+bool
+file_isdir (struct file *file)
+{
+  return inode_isdir (file->inode);
 }

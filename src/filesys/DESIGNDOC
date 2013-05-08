@@ -1,0 +1,302 @@
+       	       	     +-------------------------+
+		     |		CS 140	       |
+		     | PROJECT 4: FILE SYSTEMS |
+		     |	   DESIGN DOCUMENT     |
+		     +-------------------------+
+
+---- GROUP ----
+
+>> Fill in the names and email addresses of your group members.
+
+William Robinson     <billyrob@vt.edu
+James   Schwinabart  <jschwina@vt.edu>
+Andrew  Shugarts     <rue92@vt.edu>
+
+---- PRELIMINARIES ----
+
+>> If you have any preliminary comments on your submission, notes for the
+>> TAs, or extra credit, please give them here.
+
+Included is an implementation for a buffer cache which uses Clock with
+Adaptive Replacement rather than plain clock. This was primarily for the
+experience of implementing this alternative more so than any performance
+benefits that it may have.
+
+>> Please cite any offline or online sources you consulted while
+>> preparing your submission, other than the Pintos documentation, course
+>> text, lecture notes, and course staff.
+
+http://www.almaden.ibm.com/cs/people/dmodha/clockfast.pdf
+http://uranus.chrysocome.net/explore2fs/es2fs.htm
+
+		     INDEXED AND EXTENSIBLE FILES
+		     ============================
+
+---- DATA STRUCTURES ----
+
+>> A1: Copy here the declaration of each new or changed `struct' or
+>> `struct' member, global or static variable, `typedef', or
+>> enumeration.  Identify the purpose of each in 25 words or less.
+
+static struct lock inodes_lock; // Keeps the inodes list from getting
+       	      	   		// screwed up by concurrent modification.
+
+struct inode_disk
+  {
+    uint32_t mode; /* Indicates what the on-disk inode represents (directory, file, etc.) */
+    off_t size; /* Indicates the size of the file */
+    block_sector_t direct[123]; /* Locations for the first 123 blocks of data */
+    block_sector_t first_indirect; /* Location of the indirect block */
+    block_sector_t doubly_indirect; /* Location of the doubly indirect block */
+    block_sector_t triply_indirect; /* Location of the triply indirect block */
+  };
+
+struct inode 
+  {
+    struct list_elem elem;              /* Element in inode list. */
+    struct lock mod_lock;               /* Lock to keep the counters from getting screwed up */
+    block_sector_t sector;              /* Sector number of disk location. */
+    int open_cnt;                       /* Number of openers. */
+    bool removed;                       /* True if deleted, false otherwise. */
+    int deny_write_cnt;                 /* 0: writes ok, >0: deny writes. */
+    off_t size;                         /* Indicates the size of the data,
+					   used to prevent needless disk access. */
+  };
+
+"Removed" the directory structure. Much easier to use file structs as
+if they were directories.
+
+>> A2: What is the maximum size of a file supported by your inode
+>> structure?  Show your work.
+
+There are 123 direct blocks for 62976 bytes of direct block data. Then
+there are 128 blocks corresponding to the indirect block and so 62976
++ 128 * 512 = 128512 bytes of data accessible. There are then 128
+indirect blocks for the doubly indirect block and 128 blocks for each
+indirect block for a total of 128512 + 128 * 128 * 512 = 8517120
+bytes. Finally, for the triply indirect block there are 128 doubly
+indirect blocks each with 128 indirect blocks also each with 128
+blocks for a grand total of 8517120 + 128 * 128 * 128 * 512 =
+1082258944 bytes, or approximately 1032 MB for a maximum file size.
+
+---- SYNCHRONIZATION ----
+
+>> A3: Explain how your code avoids a race if two processes attempt to
+>> extend a file at the same time.
+
+>> A4: Suppose processes A and B both have file F open, both
+>> positioned at end-of-file.  If A reads and B writes F at the same
+>> time, A may read all, part, or none of what B writes.  However, A
+>> may not read data other than what B writes, e.g. if B writes
+>> nonzero data, A is not allowed to see all zeros.  Explain how your
+>> code avoids this race.
+
+>> A5: Explain how your synchronization design provides "fairness".
+>> File access is "fair" if readers cannot indefinitely block writers
+>> or vice versa.  That is, many processes reading from a file cannot
+>> prevent forever another process from writing the file, and many
+>> processes writing to a file cannot prevent another process forever
+>> from reading the file.
+
+---- RATIONALE ----
+
+>> A6: Is your inode structure a multilevel index?  If so, why did you
+>> choose this particular combination of direct, indirect, and doubly
+>> indirect blocks?  If not, why did you choose an alternative inode
+>> structure, and what advantages and disadvantages does your
+>> structure have, compared to a multilevel index?
+
+Yes it is. My particular combination of direct and n-ary indirect
+blocks was modeled partly after the ext2 filesystem design. Originally
+I had intended to write inode structure to be only 128 bytes in size
+so that 4 inodes could be fit on a sector, but the more I thought
+about it the more of a struggle I would've had to deal with reading
+the on-disk inode. Fortunately, the structure of a multilevel index
+allowed me to simply make an inode occupy a full sector by extending
+the number of direct blocks to 123. This had the positive consequence
+that the majority of files would fit entirely within the direct blocks
+as well.
+
+			    SUBDIRECTORIES
+			    ==============
+
+---- DATA STRUCTURES ----
+
+>> B1: Copy here the declaration of each new or changed `struct' or
+>> `struct' member, global or static variable, `typedef', or
+>> enumeration.  Identify the purpose of each in 25 words or less.
+
+No changes.
+
+---- ALGORITHMS ----
+
+>> B2: Describe your code for traversing a user-specified path.  How
+>> do traversals of absolute and relative paths differ?
+
+When traversing a path I first remove the end destination from the
+traversal. Predominantly because in the general case I cannot
+guarantee that the end destination exists, and so to leave the decision
+about what to do with the end destination to the caller by telling
+them where the beginning of the string for the end destination starts
+by changing a pointer to represent the offset in the string the end
+destination starts at. Then if the path is absolute I start by opening
+the root directory, then incrementing past the initial '/' in the
+path. Otherwise the path is relative so I open the threads current
+working directory. Then I tokenize the path by the forward slash and
+go through trying to look up that directory in my currently open
+directory. Then I close my current directory because I don't need it
+anymore. If I don't find anything, I can return null to let my
+caller know that the path didn't work. If I do, then I make sure it is
+a directory, open it, and repeat. When I have no more tokens, I'm done.
+
+---- SYNCHRONIZATION ----
+
+>> B4: How do you prevent races on directory entries?  For example,
+>> only one of two simultaneous attempts to remove a single file
+>> should succeed, as should only one of two simultaneous attempts to
+>> create a file with the same name, and so on.
+
+>> B5: Does your implementation allow a directory to be removed if it
+>> is open by a process or if it is in use as a process's current
+>> working directory?  If so, what happens to that process's future
+>> file system operations?  If not, how do you prevent it?
+
+---- RATIONALE ----
+
+>> B6: Explain why you chose to represent the current directory of a
+>> process the way you did.
+
+I represented the current directory as simply the block sector
+
+			     BUFFER CACHE
+			     ============
+
+---- DATA STRUCTURES ----
+
+>> C1: Copy here the declaration of each new or changed `struct' or
+>> `struct' member, global or static variable, `typedef', or
+>> enumeration.  Identify the purpose of each in 25 words or less.
+
+struct block *disk;                /* Pointer to the filesystem block
+       	     			   device. */
+static bool shutdown = false;	   /* Is the buffer cache shutting
+       	     			   down? */
+static struct bitmap *cache_free;  /* Free entries in the cache. */
+static void *pool;   		   /* Memory corresponding to the
+       	     			   pool. */
+
+// You can thank the authors of the whitepaper for this wonderful
+// nomenclature. 
+static struct list T1, T2, B1, B2;      /* Lists to keep track of buffer
+       	      	       	       	        cache entries. */
+static struct lock list_lock, map_lock; /* Locks to protect the free
+       	      	   	      		map and the lists. */
+static uint32_t p;			/* Dynamic cache eviction
+       					value */
+
+struct cache_block {
+  
+  block_sector_t block_sector_id;    /* Index of disk sector */
+  bool dirty; 	 		     /* Dirty bit -- Needs write back */
+  bool valid; 			     /* Valid bit -- Matches on-disk
+       				     data */
+  uint32_t readers; 		     /* # of threads reading this block */
+  uint32_t writers; 		     /* # of threads writing to this block */
+  uint32_t pending; 		     /* # of threads waiting to do I/O
+  	   			     on this block */
+  struct lock IO_lock; 		     /* IO concurrency lock */
+  struct condition announcer; 	     /* Signal variable for other threads */
+  bool reference;  		     /* Reference bit for use in cache
+       				     eviction */
+  struct list_elem elem;	     /* List element for cache */
+  void *data; 	   		     /* Pointer to this blocks data. */
+};
+
+---- ALGORITHMS ----
+
+>> C2: Describe how your cache replacement algorithm chooses a cache
+>> block to evict.
+
+The algorithm is described in the paper cited at the
+beginning. Essentially when the cache gets full, we use our knowledge
+of what blocks have been recently referenced to group blocks that are
+accessed frequently or have been accessed recently. Then we know that
+these blocks are more important than the others. This creates a
+complementary group that is not necessarily important. We then decide
+to evict those blocks that come from this less important
+group. Further we try to evict the blocks that are only in our cache
+for recency first before we try to evict blocks that are in our cache
+for frequency. When we finally do evict a block, we remove the least
+recently used block from whichever list we've chosen.
+
+>> C3: Describe your implementation of write-behind.
+
+When a block is evicted, write it back immediately if it's
+dirty. Otherwise, a kernel daemon thread titled "KCacheD" iterates
+through all the blocks in the cache and writes them back if they are
+dirty every thirty seconds. There's some waiting using a condition
+variable to make sure there are no readers or writers while we write
+back to disk, but otherwise, it's fairly simple. Finally, a shutdown
+boolean stops the thread from running when the cache is shutting
+down. Then we abuse the design to call the write-behind function when
+we shutdown as a final precaution against data loss.
+
+>> C4: Describe your implementation of read-ahead.
+
+A little bit of kludge, but all we do is start a thread titled
+"KCacheD" that gets the next block and then puts it back to implement
+read-ahead. Then to prevent our thread from starting another
+read-ahead we make sure that no thread named "KCacheD" is allowed to
+start a new read-ahead thread. Potentially, if someone else wanted to
+name their thread "KCacheD" they wouldn't read ahead when they
+requested blocks from the cache, but I consider this to be a minor
+problem. 
+
+---- SYNCHRONIZATION ----
+
+>> C5: When one process is actively reading or writing data in a
+>> buffer cache block, how are other processes prevented from evicting
+>> that block?
+
+They are forced to wait using a condition variable based off of active
+readers and writers until there are no processes using the block. Then
+the block is evicted.
+
+>> C6: During the eviction of a block from the cache, how are other
+>> processes prevented from attempting to access the block?
+
+When we evict the block we hold the lock for the lists, and only the
+holder of that lock is capable of searching for a block in the cache,
+so effectively we deny any thread from retrieving a block until we are
+done evicting and replacing.
+
+---- RATIONALE ----
+
+>> C7: Describe a file workload likely to benefit from buffer caching,
+>> and workloads likely to benefit from read-ahead and write-behind.
+
+
+
+			   SURVEY QUESTIONS
+			   ================
+
+Answering these questions is optional, but it will help us improve the
+course in future quarters.  Feel free to tell us anything you
+want--these questions are just to spur your thoughts.  You may also
+choose to respond anonymously in the course evaluations at the end of
+the quarter.
+
+>> In your opinion, was this assignment, or any one of the three problems
+>> in it, too easy or too hard?  Did it take too long or too little time?
+
+>> Did you find that working on a particular part of the assignment gave
+>> you greater insight into some aspect of OS design?
+
+>> Is there some particular fact or hint we should give students in
+>> future quarters to help them solve the problems?  Conversely, did you
+>> find any of our guidance to be misleading?
+
+>> Do you have any suggestions for the TAs to more effectively assist
+>> students in future quarters?
+
+>> Any other comments?

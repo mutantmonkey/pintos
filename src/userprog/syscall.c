@@ -8,10 +8,11 @@
 #include "devices/shutdown.h"
 #include "filesys/file.h"
 #include "filesys/filesys.h"
+#include "filesys/directory.h"
 #include <console.h>
 #include <devices/input.h>
 #include "vm/vm.h"
-struct lock sys_file_io;
+//struct lock sys_file_io;
 
 static void syscall_handler (struct intr_frame *);
 static void sys_halt (void);
@@ -27,6 +28,11 @@ static int sys_write (int fd, const void *buffer, unsigned length);
 static void sys_seek (int fd, unsigned position);
 static unsigned sys_tell (int fd);
 static void sys_close (int fd);
+static bool sys_isdir (int fd);
+static bool sys_mkdir (const char *dir);
+static bool sys_chdir (const char *dir);
+static int sys_inumber (int fd);
+static bool sys_readdir (int fd, char *name);
 static int mmap(int fd, void* addr);
 static void munmap(int mapping);
 
@@ -37,7 +43,7 @@ static void munmap(int mapping);
 void
 syscall_init (void) 
 {
-  lock_init(&sys_file_io);
+  //  lock_init(&sys_file_io);
   intr_register_int (0x30, 3, INTR_ON, syscall_handler, "syscall");
 }
 
@@ -102,6 +108,21 @@ syscall_handler (struct intr_frame *f)
     case SYS_MUNMAP:
       munmap (FIRST(p));
       break;
+    case SYS_CHDIR:
+      f->eax = sys_chdir ((char *)FIRST(p));
+      break;
+    case SYS_MKDIR:
+      f->eax = sys_mkdir ((char *)FIRST(p));
+      break;
+    case SYS_READDIR:
+      f->eax = sys_readdir (FIRST(p), (char *)SECOND(p));
+      break;
+    case SYS_ISDIR:
+      f->eax = sys_isdir (FIRST(p));
+      break;
+    case SYS_INUMBER:
+      f->eax = sys_inumber (FIRST(p));
+      break;
     default:
       sys_exit (-1);
       break;
@@ -146,9 +167,9 @@ sys_create (const char *file, unsigned initial_size)
   if (!valid_ptr((void *)file))
     sys_exit (-1);
 
-  lock_acquire(&sys_file_io);
+  //  lock_acquire(&sys_file_io);
   bool result = filesys_create (file, initial_size);
-  lock_release(&sys_file_io);
+  //  lock_release(&sys_file_io);
 
   return result;
 }
@@ -165,9 +186,9 @@ static int sys_open (const char *file)
   for (; i < 128; i++)
     if (t->fd_table[i] == NULL)
       {
-	lock_acquire(&sys_file_io);
+	//	lock_acquire(&sys_file_io);
 	f = filesys_open (file);
-	lock_release(&sys_file_io);
+	//	lock_release(&sys_file_io);
 	if (f == NULL)
 	  return -1;
 
@@ -270,7 +291,9 @@ sys_close (int fd)
 
   struct file *f = get_file (fd, true);
   if (f != NULL)
-    file_close (f);
+    {
+      file_close (f);
+    }
 }
 
 static unsigned
@@ -293,9 +316,7 @@ sys_remove (const char *file)
 
   if (file != NULL)
     {
-      lock_acquire(&sys_file_io);
       bool result = filesys_remove (file);
-      lock_release(&sys_file_io);
       return result;
     }
   return false;
@@ -331,9 +352,9 @@ sys_read (int fd, void *buffer, unsigned length)
   struct file *file = get_file (fd, false);
   if (file != NULL)
     {
-      lock_acquire(&sys_file_io);
+      //      lock_acquire(&sys_file_io);
       int result = file_read (file, buffer, length);
-      lock_release(&sys_file_io);
+      //      lock_release(&sys_file_io);
       return result;
     }
   return -1;
@@ -355,14 +376,62 @@ sys_write (int fd, const void *buffer, unsigned length)
     return -1;
 
   struct file *file = get_file (fd, false);
+  if (file_isdir (file))
+    return -1;
   if (file != NULL)
     {
-      lock_acquire(&sys_file_io);
+      //      lock_acquire(&sys_file_io);
       int result = file_write(file, buffer, length);
-      lock_release(&sys_file_io);
+      //      lock_release(&sys_file_io);
       return result;
     }
   return 0;
+}
+
+static bool sys_chdir (const char *dir)
+{
+  if (!valid_ptr ((void *) dir))
+    sys_exit (-1);
+
+  return filesys_chdir (dir);
+}
+
+static bool sys_mkdir (const char *dir)
+{
+  if (!valid_ptr ((void *) dir))
+    sys_exit (-1);
+  
+  return filesys_mkdir (dir);
+}
+
+static bool sys_readdir (int fd, char *name)
+{
+  if (!is_valid_fd (fd))
+    return false;
+
+  struct file *f = get_file (fd, false);
+  if (!file_isdir (f))
+    return false;
+
+  return dir_readdir (f, name);  
+}
+
+static bool sys_isdir (int fd)
+{
+  if (!is_valid_fd (fd))
+    return false;
+
+  struct file *f = get_file (fd, false);
+  return file_isdir (f);
+}
+
+static int sys_inumber (int fd)
+{
+  if (!is_valid_fd (fd))
+    return -1;
+
+  struct file *f = get_file (fd, false);
+  return file_get_inumber (f);
 }
 
 // vim:ts=2:sw=2:et:

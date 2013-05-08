@@ -17,6 +17,7 @@
  * algorithm for cache management described in a whitepaper by Bansal
  * and Modha. Thus, four lists are used in order to keep track of
  * frequent and recent cache entries, along with the histories of each.
+ * [http://www.almaden.ibm.com/cs/people/dmodha/clockfast.pdf]
  */
 
 struct cache_block {
@@ -66,7 +67,8 @@ static struct cache_block * contains(struct list *, block_sector_t);
 static void replace (void);
 static void init_block (struct cache_block *);
 void buffer_writeback (void * UNUSED);
-static size_t locking_list_size (struct list *);
+static void readahead (void * UNUSED);
+void flush_daemon (void * UNUSED);
 
 /* END FUNCTION PROTOTYPES */
 
@@ -75,8 +77,10 @@ struct cache_block *
 cache_get_block (block_sector_t sector, bool exclusive)
 {
   struct cache_block *hit = NULL;
+  lock_acquire (&list_lock);
   if ((hit = contains(&T1, sector)) || (hit = contains(&T2, sector)))
     {
+      lock_release (&list_lock);
       lock_acquire (&hit->IO_lock);
       // Cache hit
       hit->reference = true;
@@ -104,22 +108,24 @@ cache_get_block (block_sector_t sector, bool exclusive)
     }
   else
     {
-      if (locking_list_size (&T1) + locking_list_size (&T2) == NUM_BLOCK)
+      if (list_size (&T1) + list_size (&T2) == NUM_BLOCK)
 	{
 	  // Cache full, replace a page from the cache
 	  replace();
 	  if (!list_empty (&B1) && !(contains(&B1, sector) || contains(&B2, sector)) &&
-	      (locking_list_size (&T1) + locking_list_size (&B1) == NUM_BLOCK))
+	      (list_size (&T1) + list_size (&B1) == NUM_BLOCK))
 	    {
 	      // Discard the LRU page in B1
-	      lock_acquire (&list_lock);
-	      struct list_elem *e = list_begin (&B2);
+	      struct list_elem *e = list_begin (&B1);
 	      list_remove(e);
 	      struct cache_block * remove = list_entry(e, struct cache_block, elem);
-	      lock_release (&list_lock);
+
+	      lock_acquire (&remove->IO_lock);
+	      while (remove->pending > 0 || remove->writers > 0 || remove->readers > 0)
+		cond_wait(&remove->announcer, &remove->IO_lock);
 
 	      // Write it back if necessary
-	      if (!remove->valid || remove->dirty)
+	      if (remove->dirty)
 		block_write(disk, remove->block_sector_id, remove->data);
 
 	      // Reflect the change in the free map
@@ -128,24 +134,27 @@ cache_get_block (block_sector_t sector, bool exclusive)
 	      ASSERT (bitmap_test (cache_free, true) == true);
 	      bitmap_set (cache_free, bit, false);
 	      lock_release (&map_lock);
+	      lock_release (&remove->IO_lock);
 
 	      hit = remove;
 	    }
-	  else if ((locking_list_size (&T1) + locking_list_size (&T2)
-		    + locking_list_size (&B1) + locking_list_size (&B2) 
+	  else if ((list_size (&T1) + list_size (&T2)
+		    + list_size (&B1) + list_size (&B2) 
 		    == 2 * NUM_BLOCK) &&
 		   !(contains(&B1, sector) || contains(&B2, sector))
 		   && !list_empty (&B2))
 	    {
 	      // Discard the LRU page in B2
-	      lock_acquire (&list_lock);
 	      struct list_elem *e = list_begin (&B2);
 	      list_remove(e);
 	      struct cache_block * remove = list_entry(e, struct cache_block, elem);
-	      lock_release (&list_lock);
+
+	      lock_acquire (&remove->IO_lock);
+	      while (remove->pending > 0 || remove->writers > 0 || remove->readers > 0)
+		cond_wait(&remove->announcer, &remove->IO_lock);
 
 	      // Write it back if necessary
-	      if (!remove->valid || remove->dirty)
+	      if (remove->dirty)
 		block_write (disk, remove->block_sector_id, remove->data);
 
 	      // Reflect the change in the free map
@@ -154,6 +163,7 @@ cache_get_block (block_sector_t sector, bool exclusive)
 	      ASSERT (bitmap_test (cache_free, true) == true);
 	      bitmap_set (cache_free, bit, false);
 	      lock_release (&map_lock);
+	      lock_release (&remove->IO_lock);
 
 	      hit = remove;
 	    }
@@ -182,8 +192,8 @@ cache_get_block (block_sector_t sector, bool exclusive)
 	  // Find a free page
 	  lock_acquire (&map_lock);
 	  size_t bit = bitmap_scan(cache_free, 0, 1, false);
-	  if (bit == BITMAP_ERROR)
-	    PANIC("Could not find free page!");
+	  while (bit == BITMAP_ERROR)
+	    bit= bitmap_scan (cache_free, 0, 1, false);
 	  
 	  bitmap_set(cache_free, bit, true);
 	  lock_release (&map_lock);
@@ -191,10 +201,13 @@ cache_get_block (block_sector_t sector, bool exclusive)
 	  // Assign cache memory
 	  hit->data = pool + bit * BLOCK_SECTOR_SIZE;
 	  block_read (disk, hit->block_sector_id, hit->data);
+
+	  // If the readahead thread is the caller, don't readahead
+	  // because it's not a user request.
+	  if (strcmp(thread_current ()->name, "KCacheD") != 0)
+	    thread_create ("KCacheD", PRI_DEFAULT, readahead, (void *)(sector + 1));
 	  
-	  lock_acquire (&list_lock);
       	  list_push_back(&T1, &hit->elem);
-	  lock_release (&list_lock);
 	 
 	}
       // Cache directory hit
@@ -202,17 +215,15 @@ cache_get_block (block_sector_t sector, bool exclusive)
 	{
 	  // Adapt: Increase the target size for the list T1 as: p =
 	  // min{p + max{1, |B2|/|B1|}, c}
-	  size_t b1 = locking_list_size (&B1);
-	  size_t b2 = locking_list_size (&B2);
+	  size_t b1 = list_size (&B1);
+	  size_t b2 = list_size (&B2);
 	  uint32_t prop = b2 / b1;
 	  
 	  p = min (p + max (1, prop), NUM_BLOCK);
 	  // Move x at the tail of T2. Set the page reference bit of x
 	  // to 0.
-	  lock_acquire (&list_lock);
 	  list_remove (&hit->elem);
 	  list_push_back(&T2, &hit->elem);
-	  lock_release (&list_lock);
 	  hit->reference = false;
 	}
       // Cache directory hit
@@ -220,20 +231,19 @@ cache_get_block (block_sector_t sector, bool exclusive)
 	{
 	  // Adapt: Decrease the target size for the list T1 as: p =
 	  // max{p - max{1, |B1|/|B2|}, 0}
-	  size_t b1 = locking_list_size (&B1);
-	  size_t b2 = locking_list_size (&B2);
+	  size_t b1 = list_size (&B1);
+	  size_t b2 = list_size (&B2);
 	  uint32_t prop = b1 / b2;
 
 	  p = max (p - max (1, prop), 0);
 	  // Move x at the tail of T2. Set the page reference bit of x
 	  // to 0.
-	  lock_acquire (&list_lock);
 	  list_remove (&hit->elem);
 	  list_push_back(&T2, &hit->elem);
-	  lock_release (&list_lock);
 	  hit->reference = false;
 	}
     }
+  lock_release (&list_lock);
   return hit;
 }
 
@@ -248,9 +258,8 @@ replace ()
   struct cache_block *block;
   while (!found)
     {
-      if (locking_list_size (&T1) >= (unsigned)max(1, p)) //T1 is too full
+      if (list_size (&T1) >= (unsigned)max(1, p)) //T1 is too full
 	{
-	  lock_acquire (&list_lock);
 	  block = list_entry(list_pop_front(&T1), struct cache_block, elem);
 	  if (block->reference == false) // If reference bit of head page of T1 is 0
 	    {
@@ -264,11 +273,9 @@ replace ()
 	      block->reference = false;
 	      list_push_back(&T2, &block->elem);
 	    }
-	  lock_release (&list_lock);
 	}
       else
 	{
-	  lock_acquire (&list_lock);
 	  block = list_entry(list_pop_front(&T2), struct cache_block, elem);
 	  if (block->reference == false) // If reference bit of head page of T2 is 0
 	    {
@@ -282,7 +289,6 @@ replace ()
 	      block->reference = false;
 	      list_push_back(&T2, &block->elem);
 	    }
-	  lock_release (&list_lock); 
 	}
     }
 
@@ -297,7 +303,7 @@ cache_put_block (struct cache_block *b)
     b->writers = 0;
   else if (b->readers > 0)
     b->readers--;
-  cond_signal (&b->announcer, &b->IO_lock);
+  cond_broadcast (&b->announcer, &b->IO_lock);
   lock_release (&b->IO_lock);
 }
 
@@ -321,16 +327,21 @@ cache_zero_block (struct cache_block *b)
 void
 cache_mark_block_dirty (struct cache_block *b)
 {
+  b->reference = true;
   b->valid = false;
   b->dirty = true;
 }
 
-/*
-static void readahead (void)
+static void readahead (void * _next)
 {
-  PANIC("readahead not implemented.");
+  block_sector_t next = (block_sector_t) _next;
+  if (next >= block_size (disk))
+    return;
+  thread_yield ();
+  struct cache_block *block = cache_get_block (next, false);
+  cache_put_block (block);
+  thread_exit ();
 }
-*/
 
 /**
  * Initializes a cache_block structure with some default information.
@@ -373,49 +384,8 @@ void buffer_initialize ()
 
   // Allocate space for the data
   pool = palloc_get_multiple (0, 2 * NUM_PAGES);
-  /*
-    int i = 0;
-    for (; i < 2 * NUM_PAGES; i++)
-    {
-    pool[i] = palloc_get_page(0);
-    }
-  */
-
-  /*  
-      for (i = 0; i < 2 * NUM_BLOCK; i++)
-      {
-      if ((sizeof(struct cache_block) * (i - last_page) + 
-      sizeof(struct cache_block)) > 4096)
-      {
-      // Allocate more space for cache_block information since 
-      // we've run out
-      last_page = i;
-      blocks[last_page] = palloc_get_page(0);
-      }
-      else
-      {
-      // Set the address of block[i] to be within the memory space
-      // of the last allocated page.
-      blocks[i] = blocks[last_page] + 
-      sizeof(struct cache_block) * (i - last_page);
-      }
-
-      // Set the data field of a block to a memory address in the pool.
-      blocks[i]->data = pool[i/8] + ((i % 8) * 512);
-
-      // Initialize block information
-      blocks[i]->block_sector_id = 0;
-      blocks[i]->dirty = false;
-      blocks[i]->valid = true;
-      blocks[i]->readers = 0;
-      blocks[i]->writers = 0;
-      blocks[i]->pending = 0;
-      lock_init(&blocks[i]->IO_lock);
-      cond_init(&blocks[i]->announcer);
-      }
-  */
   
-  //   kcached = thread_create ("KCacheD", 40, buffer_writeback, NULL);
+  kcached = thread_create ("KCacheD", PRI_DEFAULT, flush_daemon, NULL);
 }
 
 /**
@@ -426,8 +396,8 @@ void buffer_shutdown (void)
 {
 
   // Write everything back
-  buffer_writeback (NULL);
   shutdown = true;
+  buffer_writeback (NULL);
 
   int i = 0;
   // Deallocate data space
@@ -435,22 +405,6 @@ void buffer_shutdown (void)
     {
       palloc_free_page(pool + i * PGSIZE);
     }
-  
-  /*
-  // Deallocate space for the metadata
-  int pages = sizeof(struct cache_block) * NUM_BLOCK / 4096;
-  int last_page = 0;
-  for (i = 0; i < NUM_BLOCK; i++)
-    {
-      if ((sizeof(struct cache_block) * (i - last_page) + 
-	   sizeof(struct cache_block)) > 4096)
-	{
-	  // Deallocate metadata space
-	  last_page = i;
-	  palloc_free_page(blocks[last_page]);
-	}
-    }
-  */
 }
 
 /**
@@ -458,41 +412,121 @@ void buffer_shutdown (void)
  */
 void buffer_writeback (void *kcached_started_ UNUSED)
 {
+  struct list_elem *e;
+  struct cache_block *b;
+  struct list *lists[4] = {&T1, &T2, &B1, &B2};
+  lock_acquire (&list_lock);
+  int i = 0;
+  for (i = 0; i < 4; i++)
+    for (e = list_begin (lists[i]); e != list_end (lists[i]); e = list_next (e))
+      {
+b = list_entry (e, struct cache_block, elem);
+      
+      lock_acquire (&b->IO_lock);
+      while (b->writers == 1 || b->readers > 0)
+	cond_wait (&b->announcer, &b->IO_lock);
+      
+      if (b->dirty)
+	{
+	  b->writers = 1;
+	  block_write (disk, b->block_sector_id, b->data);
+	  b->dirty = false;
+	  b->valid = true;
+	  b->writers = 0;
+	}
+      cond_signal (&b->announcer, &b->IO_lock);
+      lock_release (&b->IO_lock);
+      }
+  lock_release (&list_lock);
+
+  /*
+  for (e = list_begin (&T1); e != list_end (&T1); e = list_next (e))
+    {
+      b = list_entry (e, struct cache_block, elem);
+      
+      lock_acquire (&b->IO_lock);
+      while (b->writers == 1 || b->readers > 0)
+	cond_wait (&b->announcer, &b->IO_lock);
+      
+      if (b->dirty)
+	{
+	  b->writers = 1;
+	  block_write (disk, b->block_sector_id, b->data);
+	  b->dirty = false;
+	  b->valid = true;
+	  b->writers = 0;
+	}
+      cond_signal (&b->announcer, &b->IO_lock);
+      lock_release (&b->IO_lock);
+    }
+  for (e = list_begin (&T2); e != list_end (&T2); e = list_next (e))
+    {
+      b = list_entry (e, struct cache_block, elem);
+      
+      lock_acquire (&b->IO_lock);
+      while (b->writers == 1 || b->readers > 0)
+	cond_wait (&b->announcer, &b->IO_lock);
+      
+      if (b->dirty)
+	{
+	  b->writers = 1;
+	  block_write (disk, b->block_sector_id, b->data);
+	  b->dirty = false;
+	  b->valid = true;
+	  b->writers = 0;
+	}
+      cond_signal (&b->announcer, &b->IO_lock);
+      lock_release (&b->IO_lock);
+    }
+  for (e = list_begin (&B1); e != list_end (&B1); e = list_next (e))
+    {
+      b = list_entry (e, struct cache_block, elem);
+      
+      lock_acquire (&b->IO_lock);
+      while (b->writers == 1 || b->readers > 0)
+	cond_wait (&b->announcer, &b->IO_lock);
+      
+      if (b->dirty)
+	{
+	  b->writers = 1;
+	  block_write (disk, b->block_sector_id, b->data);
+	  b->dirty = false;
+	  b->valid = true;
+	  b->writers = 0;
+	}
+      cond_signal (&b->announcer, &b->IO_lock);
+      lock_release (&b->IO_lock);
+    }
+  for (e = list_begin (&B2); e != list_end (&B2); e = list_next (e))
+    {
+      b = list_entry (e, struct cache_block, elem);
+      
+      lock_acquire (&b->IO_lock);
+      while (b->writers == 1 || b->readers > 0)
+	cond_wait (&b->announcer, &b->IO_lock);
+      
+      if (b->dirty)
+	{
+	  b->writers = 1;
+	  block_write (disk, b->block_sector_id, b->data);
+	  b->dirty = false;
+	  b->valid = true;
+	  b->writers = 0;
+	}
+      cond_signal (&b->announcer, &b->IO_lock);
+      lock_release (&b->IO_lock);
+    }
+  lock_release (&list_lock);
+  */
+
+}
+
+void flush_daemon (void *ptr UNUSED)
+{
   while (!shutdown)
     {
-      struct list_elem *e;
-      struct cache_block *b;
-      lock_acquire (&list_lock);
-      for (e = list_begin (&T1); e != list_end (&T1); e = list_next (e))
-	{
-	  b = list_entry (e, struct cache_block, elem);
-
-	  lock_acquire (&b->IO_lock);
-	  while (b->writers == 1 || b->readers > 0)
-	    cond_wait (&b->announcer, &b->IO_lock);
-
-	  block_write (disk, b->block_sector_id, b->data);
-	  b->dirty = false;
-	  b->valid = true;
-	  cond_signal (&b->announcer, &b->IO_lock);
-	  lock_release (&b->IO_lock);
-	}
-      for (e = list_begin (&T2); e != list_end (&T2); e = list_next (e))
-	{
-	  b = list_entry (e, struct cache_block, elem);
-
-	  lock_acquire (&b->IO_lock);
-	  while (b->writers == 1 || b->readers > 0)
-	    cond_wait (&b->announcer, &b->IO_lock);
-	  
-	  block_write (disk, b->block_sector_id, b->data);
-	  b->dirty = false;
-	  b->valid = true;
-	  cond_signal (&b->announcer, &b->IO_lock);
-	  lock_release (&b->IO_lock);
-	}
-      lock_release (&list_lock);
-      timer_msleep(1000 * 30);
+      timer_msleep (30 * 1000);
+      buffer_writeback (NULL);
     }
 }
 
@@ -504,7 +538,6 @@ static struct cache_block *
 contains (struct list *list, block_sector_t sector)
 {
 
-  lock_acquire (&list_lock);
   struct list_elem *e = list_begin(list);
   for (; e != list_end(list); e = list_next(e))
     {
@@ -513,19 +546,9 @@ contains (struct list *list, block_sector_t sector)
 
       if (cur->block_sector_id == sector)
 	{
-	  lock_release (&list_lock);
+	  //	  lock_release (&list_lock);
 	  return cur;
 	}
     }
-  lock_release (&list_lock);
   return NULL;
-}
-
-static size_t 
-locking_list_size (struct list *list)
-{
-  lock_acquire (&list_lock);
-  size_t ret = list_size (list);
-  lock_release (&list_lock);
-  return ret;
 }
