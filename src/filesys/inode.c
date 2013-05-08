@@ -290,7 +290,6 @@ inode_close (struct inode *inode)
         }
 
       lock_release (&inode->mod_lock);
-      printf("\nFreeing %p for sector %d\n", inode, inode->sector);
       free (inode);
       goto skip_release;
     }

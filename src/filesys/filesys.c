@@ -174,7 +174,6 @@ filesys_open (const char *name)
   const char *filename = name + name_offset;
   if (dir == NULL)
     return false;
-  printf("Resolved Directory\t");
 
   find = malloc (sizeof(char) * strlen(filename));
   if (find == NULL)
@@ -182,18 +181,14 @@ filesys_open (const char *name)
       dir_close (dir);
       return false;
     }
-  printf("Allocated Buffer\t");
 
   if (strchr ((name + name_offset), '/'))
     strlcpy (find, filename, strlen(filename));
   else
     strlcpy (find, filename, strlen(filename) + 1);
   struct inode *inode = NULL;
-  printf("Looking for %s\t", filename);
 
   dir_lookup (dir, filename, &inode);
-  if (inode != NULL)
-    printf("Found File\n");
   dir_close (dir);
 
   return file_open (inode);
