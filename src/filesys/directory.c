@@ -128,7 +128,9 @@ dir_lookup (struct file *dir, const char *name,
 
   file_lock (dir);
   if (lookup (dir, name, &e, NULL))
-    *inode = inode_open (e.inode_sector);
+    {
+      *inode = inode_open (e.inode_sector);
+    }
   else
     *inode = NULL;
   file_unlock (dir);
@@ -209,6 +211,8 @@ dir_remove (struct file *dir, const char *name)
   inode = inode_open (e.inode_sector);
   if (inode == NULL)
     goto done;
+  if (inode_get_inumber (inode) == ROOT_DIR_SECTOR)
+    goto done;
 
   if (inode_isdir (inode))
     {
@@ -246,9 +250,8 @@ dir_readdir (struct file *dir, char name[NAME_MAX + 1])
   file_lock (dir);
   while (file_read (dir, &e, sizeof e) == sizeof e) 
     {
-      //      dir->pos += sizeof e;
       if (e.in_use && !(strcmp (e.name, ".") == 0) &&
-	  !(strcmp (e.name, "..") == 0))
+      	  !(strcmp (e.name, "..") == 0))
         {
           strlcpy (name, e.name, NAME_MAX + 1);
 	  file_unlock (dir);
@@ -283,7 +286,7 @@ dir_is_empty (struct file *dir)
 struct file *
 dir_resolve (const char *path_, int *name_off)
 {
-  char *path = malloc ((strlen(path_) + 1) * sizeof(char));
+  char *path = calloc (1, (strlen(path_) + 1) * sizeof(char));
   char *to_free = path;
   if (path == NULL)
     return NULL;
@@ -307,7 +310,7 @@ dir_resolve (const char *path_, int *name_off)
   if (*path == '/')
     {
       dir = dir_open (inode_open (ROOT_DIR_SECTOR));
-      path++;
+      while (*path == '/') path++;
     }
   else
     {
@@ -334,5 +337,6 @@ dir_resolve (const char *path_, int *name_off)
 	}
       dir = dir_open (found);
     }
+  free (to_free);
   return dir;
 }

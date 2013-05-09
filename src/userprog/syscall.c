@@ -12,7 +12,7 @@
 #include <console.h>
 #include <devices/input.h>
 #include "vm/vm.h"
-//struct lock sys_file_io;
+#include <string.h>
 
 static void syscall_handler (struct intr_frame *);
 static void sys_halt (void);
@@ -56,6 +56,7 @@ static void
 syscall_handler (struct intr_frame *f) 
 {
   int *p = f->esp;
+  thread_current ()->sys_esp = f->esp;
 
   if (!is_user_vaddr (p) || !is_user_vaddr (p + 1) ||
       !is_user_vaddr (p + 2) || !is_user_vaddr (p + 3) ||
@@ -67,6 +68,7 @@ syscall_handler (struct intr_frame *f)
       sys_halt ();
       break;
     case SYS_EXIT:
+      thread_current ()->sys_esp = NULL;
       f->eax = sys_exit (FIRST(p));
       break;
     case SYS_EXEC:
@@ -124,9 +126,11 @@ syscall_handler (struct intr_frame *f)
       f->eax = sys_inumber (FIRST(p));
       break;
     default:
-      sys_exit (-1);
+      thread_current ()->sys_esp = NULL;
+      f->eax = sys_exit (-1);
       break;
   }
+  thread_current ()->sys_esp = NULL;
 }
 
 static void
@@ -167,10 +171,7 @@ sys_create (const char *file, unsigned initial_size)
   if (!valid_ptr((void *)file))
     sys_exit (-1);
 
-  //  lock_acquire(&sys_file_io);
   bool result = filesys_create (file, initial_size);
-  //  lock_release(&sys_file_io);
-
   return result;
 }
 
@@ -186,9 +187,7 @@ static int sys_open (const char *file)
   for (; i < 128; i++)
     if (t->fd_table[i] == NULL)
       {
-	//	lock_acquire(&sys_file_io);
 	f = filesys_open (file);
-	//	lock_release(&sys_file_io);
 	if (f == NULL)
 	  return -1;
 
@@ -279,7 +278,7 @@ sys_seek (int fd, unsigned position)
     return;
 
   struct file *f = get_file (fd, false);
-  if (f != NULL)
+  if (f != NULL && !file_isdir(f))
       file_seek (f, position);
 }
 
@@ -303,7 +302,7 @@ sys_tell (int fd)
     return 0;
 
   struct file *f = get_file (fd, false);
-  if (f != NULL)
+  if (f != NULL && !file_isdir(f))
     return file_tell (f);
   return 0;
 }
@@ -352,9 +351,7 @@ sys_read (int fd, void *buffer, unsigned length)
   struct file *file = get_file (fd, false);
   if (file != NULL)
     {
-      //      lock_acquire(&sys_file_io);
       int result = file_read (file, buffer, length);
-      //      lock_release(&sys_file_io);
       return result;
     }
   return -1;
@@ -380,9 +377,7 @@ sys_write (int fd, const void *buffer, unsigned length)
     return -1;
   if (file != NULL)
     {
-      //      lock_acquire(&sys_file_io);
       int result = file_write(file, buffer, length);
-      //      lock_release(&sys_file_io);
       return result;
     }
   return 0;

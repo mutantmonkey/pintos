@@ -632,6 +632,7 @@ init_thread (struct thread *t, const char *name, int priority)
   sema_init(&t->exec_synch, 0);
   t->nice = 0;
   t->recent_cpu = 0;
+  t->sys_esp = NULL;
 
   if (thread_mlfqs)
   {

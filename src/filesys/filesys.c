@@ -55,7 +55,10 @@ filesys_create (const char *name, off_t initial_size)
   struct file *dir = dir_resolve (name, &name_offset);
   const char *filename = name + name_offset;
   if (strchr(filename, '/'))
-    return false;
+    {
+      dir_close (dir);
+      return false;
+    }
 
   bool success = (dir != NULL
                   && free_map_allocate (1, &inode_sector)
@@ -71,8 +74,10 @@ filesys_create (const char *name, off_t initial_size)
 bool
 filesys_mkdir (const char *name)
 {
+  // Ignore empty file names.
   if (*name == '\0')
     return false;
+
   block_sector_t inode_sector = 0, parent = 0;
   int name_offset;
   char *find = NULL;
@@ -81,7 +86,7 @@ filesys_mkdir (const char *name)
   if (dir == NULL)
     return false;
 
-  find = malloc (sizeof(char) * strlen(filename));
+  find = calloc (1, sizeof(char) * strlen(filename));
   if (find == NULL)
     {
       dir_close (dir);
@@ -93,11 +98,11 @@ filesys_mkdir (const char *name)
   else
     strlcpy (find, filename, strlen(filename) + 1);
 
-  parent = inode_get_inumber (dir_get_inode (dir));
+  parent = file_get_inumber(dir);
   // Figure out directory name
   bool success = (dir != NULL
 		  && free_map_allocate (1, &inode_sector)
-		  && inode_create (inode_sector, 0)
+		  && dir_create (inode_sector, 4096)
 		  && dir_add (dir, find, inode_sector));
   dir_close (dir);
   if (success == false)
@@ -110,6 +115,7 @@ filesys_mkdir (const char *name)
   dir_add (dir, ".", inode_sector);
   dir_add (dir, "..", parent);
   dir_close (dir);
+
   free (find);
   return success;
 }
@@ -132,7 +138,7 @@ filesys_chdir (const char *name)
   if (dir == NULL)
     return false;
 
-  find = malloc (sizeof(char) * strlen(filename));
+  find = calloc (1, sizeof(char) * strlen(filename));
   if (find == NULL)
     {
       dir_close (dir);
@@ -153,6 +159,8 @@ filesys_chdir (const char *name)
       return false;
     }
   thread_current ()->cwd = inode_get_inumber (found);
+  inode_close (found);
+  dir_close (dir);
   free (find);
   return true;
 }
@@ -175,7 +183,7 @@ filesys_open (const char *name)
   if (dir == NULL)
     return false;
 
-  find = malloc (sizeof(char) * strlen(filename));
+  find = calloc (1, sizeof(char) * strlen(filename));
   if (find == NULL)
     {
       dir_close (dir);
@@ -188,8 +196,9 @@ filesys_open (const char *name)
     strlcpy (find, filename, strlen(filename) + 1);
   struct inode *inode = NULL;
 
-  dir_lookup (dir, filename, &inode);
+  dir_lookup (dir, find, &inode);
   dir_close (dir);
+  free (find);
 
   return file_open (inode);
 }
@@ -212,7 +221,7 @@ filesys_remove (const char *name)
   if (dir == NULL)
     return false;
 
-  find = malloc (sizeof(char) * strlen(filename));
+  find = calloc (1, sizeof(char) * strlen(filename));
   if (find == NULL)
     {
       dir_close (dir);
@@ -226,6 +235,7 @@ filesys_remove (const char *name)
 
   bool success = dir != NULL && dir_remove (dir, find);
   dir_close (dir); 
+  free (find);
 
   return success;
 }
@@ -236,9 +246,10 @@ do_format (void)
 {
   printf ("Formatting file system...");
   free_map_create ();
-  if (!dir_create (ROOT_DIR_SECTOR, 2))
+  if (!dir_create (ROOT_DIR_SECTOR, 4096))
     PANIC ("root directory creation failed");
   struct file *root = dir_open (inode_open (ROOT_DIR_SECTOR));
+  inode_set_mode (file_get_inode(root), DIRECTORY);
   dir_add (root, ".", ROOT_DIR_SECTOR);
   dir_add (root, "..", ROOT_DIR_SECTOR);
   dir_close (root);

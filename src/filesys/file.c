@@ -1,4 +1,5 @@
 #include "filesys/file.h"
+#include <stdio.h>
 #include <debug.h>
 #include "filesys/inode.h"
 #include "threads/malloc.h"
@@ -30,7 +31,8 @@ file_open (struct inode *inode)
   else
     {
       inode_close (inode);
-      free (file);
+      if (file != NULL)
+	free (file);
       return NULL; 
     }
 }
@@ -61,7 +63,7 @@ file_close (struct file *file)
     {
       file_allow_write (file);
       inode_close (file->inode);
-      free (file); 
+      free (file);
     }
 }
 

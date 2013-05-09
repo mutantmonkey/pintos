@@ -128,6 +128,7 @@ struct thread
     struct lock mmap_lock;
     int latest_mapid_t;
     struct list mmap_list;
+    void *sys_esp;
     /* Owned by thread.c. */
     unsigned magic;                     /* Detects stack overflow. */
   };

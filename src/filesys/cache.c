@@ -397,6 +397,8 @@ void buffer_shutdown (void)
 
   // Write everything back
   shutdown = true;
+  printf("Writing back everything!\n");
+  printf("Max number of sectors: %d\n", block_size (disk));
   buffer_writeback (NULL);
 
   int i = 0;
