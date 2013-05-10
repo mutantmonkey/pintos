@@ -212,16 +212,20 @@ dir_remove (struct file *dir, const char *name)
   if (inode == NULL)
     goto done;
   if (inode_get_inumber (inode) == ROOT_DIR_SECTOR)
-    goto done;
+    {
+      inode_close (inode);
+      goto done;
+    }
 
   if (inode_isdir (inode))
     {
-      struct file *to_remove = dir_open (inode);
+      struct file *to_remove = dir_open (inode_reopen(inode));
       if (!dir_is_empty (to_remove))
 	{
 	  dir_close (to_remove);
 	  goto done;
 	}
+      dir_close (to_remove);
     }
 
   /* Erase directory entry. */
@@ -231,11 +235,11 @@ dir_remove (struct file *dir, const char *name)
 
   /* Remove inode. */
   inode_remove (inode);
+  inode_close (inode);
   success = true;
 
  done:
   file_unlock (dir);
-  inode_close (inode);
   return success;
 }
 

@@ -112,8 +112,13 @@ filesys_mkdir (const char *name)
     }
   dir = dir_open (inode_open (inode_sector));
   inode_set_mode (file_get_inode (dir), DIRECTORY);
-  dir_add (dir, ".", inode_sector);
-  dir_add (dir, "..", parent);
+  if (!dir_add (dir, ".", inode_sector) || !dir_add (dir, "..", parent))
+    {
+      struct file *par = dir_open (inode_open (parent));
+      dir_remove (par, find);
+      dir_close (par);
+      success = false;
+    }
   dir_close (dir);
 
   free (find);
@@ -130,6 +135,24 @@ filesys_chdir (const char *name)
       thread_current ()->cwd = ROOT_DIR_SECTOR;
       return true;
     }
+  if (strcmp (name, "..") == 0)
+    {
+      struct file *dir = dir_open (inode_open (thread_current ()->cwd));
+      if (dir == NULL)
+	return false;
+      struct inode *found;
+      dir_lookup (dir, "..", &found);
+      dir_close (dir);
+      if (found != NULL)
+	{
+	  thread_current ()->cwd = inode_get_inumber (found);
+	  inode_close (found);
+	  return true;
+	}
+      return false;
+    }
+  if (strcmp (name, ".") == 0)
+    return true;
 
   int name_offset;
   char *find = NULL;
@@ -155,6 +178,7 @@ filesys_chdir (const char *name)
   dir_lookup (dir, find, &found);
   if (found == NULL)
     {
+      dir_close (dir);
       free (find);
       return false;
     }

@@ -235,7 +235,6 @@ inode_open (block_sector_t sector)
   inode = malloc (sizeof *inode);
   if (inode == NULL)
     {
-      printf("Out of memory! -- inode.c\n");
       lock_release (&inodes_lock);
       return NULL;
     }
@@ -369,7 +368,11 @@ inode_read_at (struct inode *inode, void *buffer_, off_t size, off_t offset)
 {
   uint8_t *buffer = buffer_;
   off_t bytes_read = 0;
-  //  uint8_t *bounce = NULL;
+
+  off_t i = 0;
+  for (; i < size; i += 4096)
+    memset (buffer_ + i, 0, 1);
+
   while (size > 0) 
     {
       /* Disk sector to read, starting byte offset within sector. */
