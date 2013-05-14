@@ -10,10 +10,10 @@ net_input (void)
 
     for (;;)
     {
-        while (e1000_receive (buf) <= 0)
+        while (e1000_receive (buf, RECV_BUF_SIZE) <= 0)
             thread_yield ();
 
         printf ("got packet\n");
-        printf ("%s\n", buf);
+        hex_dump (0, buf, 64, false);
     }
 }

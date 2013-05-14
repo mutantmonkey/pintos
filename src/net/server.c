@@ -45,7 +45,7 @@ net_init(void)
     start_timer (&timer_tcpf, &tcp_fasttmr, "tcp fast timer", TCP_FAST_INTERVAL);
     start_timer (&timer_tcps, &tcp_slowtmr, "tcp slow timer", TCP_SLOW_INTERVAL);
 
-    thread_create ("net input", 0, &net_input, NULL);
+    thread_create ("net input", 2, &net_input, NULL);
 
     struct in_addr ia = {inet_addr(NET_IP)};
     printf ("%02x:%02x:%02x:%02x:%02x:%02x bound to %s.\n",
@@ -77,7 +77,7 @@ start_timer(struct timer_args *t, void (*func)(void), const char *name, int64_t 
     t->func = func;
 
     //printf ("Starting timer %s\n", name);
-    thread_create (name, 0, &timer, t);
+    thread_create (name, 1, &timer, t);
 }
 
 static void

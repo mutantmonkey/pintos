@@ -142,7 +142,7 @@ struct rx_pkt
 
 
 void e1000_init(void);
-int e1000_transmit(char *data, int len);
-int e1000_receive(char *data);
+int e1000_transmit(char *data, size_t len);
+int e1000_receive(char *data, size_t len);
 
 

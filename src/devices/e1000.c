@@ -63,9 +63,6 @@ e1000_init(void)
   while( ! (pci_reg_read32(io, E1000_EERD) & E1000_EERD_DONE));
   pci_reg_write32(io, E1000_RAH, pci_reg_read32(io, E1000_EERD) >> 16);
  
-  pci_reg_write32 (io, E1000_RAL, 0x00f09512);
-  pci_reg_write32 (io, E1000_RAH, 0x5254);
-
   // set address valid bit
   e1000_reg_set   (io, E1000_RAH, E1000_RAH_AV);
 
@@ -159,7 +156,7 @@ e1000_reg_unset(struct pci_io *io, uint32_t reg, uint32_t value)
 }
 
 int
-e1000_transmit(char *data, int len)
+e1000_transmit(char *data, size_t len)
 {
   if (len > TX_PKT_SIZE) 
   {
@@ -191,25 +188,29 @@ e1000_transmit(char *data, int len)
 
 
 int
-e1000_receive(char *data)
+e1000_receive(char *data, size_t len)
 {
-  uint32_t rdt, len;
+  uint32_t rdt;
   rdt = pci_reg_read32 (io, E1000_RDT);
 
   if (rx_desc_array[rdt].status & E1000_RXD_STAT_DD) 
   {
-    if (!(rx_desc_array[rdt].status & E1000_RXD_STAT_EOP)) 
+    /*if (!(rx_desc_array[rdt].status & E1000_RXD_STAT_EOP)) 
     {
       PANIC("Don't allow jumbo frames!\n");
-    }
-    len = rx_desc_array[rdt].length;
+    }*/
+
+    if (rx_desc_array[rdt].length < len)
+        len = rx_desc_array[rdt].length;
 
     memmove(data, rx_pkt_bufs[rdt].buf, len);
     hex_dump(0, data, len, true);
+
     rx_desc_array[rdt].status &= ~E1000_RXD_STAT_DD;
-    rx_desc_array[rdt].status &= ~E1000_RXD_STAT_EOP;
-    //e1000[E1000_RDT] = (rdt + 1) % E1000_RCVDESC;
+    //rx_desc_array[rdt].status &= ~E1000_RXD_STAT_EOP;
+
     pci_reg_write32(io, E1000_RDT, (rdt + 1) % E1000_RCVDESC);
+
     return len;
   }
 
